@@ -1,0 +1,50 @@
+{
+    // 💡 Inputs are prompted on first server start, then stored securely by VS Code.
+    "inputs": [
+        {
+            "type": "promptString",
+            "id": "github_token_new",
+            "description": "GitHub Personal Access Token",
+            "password": true
+        }
+    ],
+    "servers": {
+        "FinWise-Orchestrator-MCP": {
+            "type": "stdio",
+            "command": "dotnet",
+            "args": [
+                "run",
+                "--project",
+                "src/finwise-orchestrator-mcp-server/finwise-orchestrator-mcp-server.csproj"
+            ]
+        },
+        "github": {
+            "command": "docker",
+            "args": [
+                "run",
+                "-i",
+                "--rm",
+                "--pull=always",
+                "-e",
+                "GITHUB_PERSONAL_ACCESS_TOKEN",
+                "ghcr.io/github/github-mcp-server"
+            ],
+            "env": {
+                "GITHUB_PERSONAL_ACCESS_TOKEN": "${input:github_token_new}"
+            }
+        },
+        // https://github.com/upstash/context7
+        "context7": {
+            "command": "docker",
+            "args": [
+                "run",
+                "--rm",
+                "-i",
+                "node:18-alpine",
+                "sh",
+                "-c",
+                "npm install -g @upstash/context7-mcp@1.0.14 && context7-mcp"
+            ]
+        }     
+    }
+}
