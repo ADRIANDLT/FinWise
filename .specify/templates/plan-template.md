@@ -33,6 +33,34 @@
 
 [Gates determined based on constitution file]
 
+## Quality Gates
+
+*Aligned with FinWise Constitution (v2.0.0)*
+
+**Code Quality**:
+- [ ] Linting configured for selected language/stack
+- [ ] Code style guide documented (or reference existing in `/docs/`)
+- [ ] Test framework selected and configured
+
+**Test Coverage**:
+- [ ] Target coverage: ≥80% per file
+- [ ] Test environment mirrors production as closely as possible
+
+**Performance**:
+- [ ] Performance targets defined (e.g., API p95 latency, startup time, memory)
+- [ ] Performance testing approach identified (load tests, profiling, monitoring)
+- [ ] Baseline metrics established from similar features if available
+
+**User Experience**:
+- [ ] Feature terminology aligned with FinWise glossary in `docs/design-system.md`
+- [ ] Error messages designed to be user-friendly and actionable
+- [ ] Cross-platform consistency verified (if applicable: web, mobile, API)
+
+**Documentation**:
+- [ ] User-facing guide planned in `/docs/user-guide/`
+- [ ] API contract documented (if applicable)
+- [ ] Accessibility requirements (WCAG 2.1 AA) considered
+
 ## Project Structure
 
 ### Documentation (this feature)

@@ -1,5 +1,3 @@
----
-
 description: "Task list template for feature implementation"
 ---
 
@@ -8,9 +6,7 @@ description: "Task list template for feature implementation"
 **Input**: Design documents from `/specs/[###-feature-name]/`
 **Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
 
-**Tests**: The examples below include test tasks. Tests are OPTIONAL - only include them if explicitly requested in the feature specification.
-
-**Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
+**Organization**: Tasks are organized by PHASE and grouped by user story to enable independent implementation of each story. Aligned with FinWise Constitution v2.0.0.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -39,6 +35,7 @@ description: "Task list template for feature implementation"
   - Implemented independently
   - Tested independently
   - Delivered as an MVP increment
+  - Code reviewed with quality checklist (linting, code quality - Constitution I, III, III)
   
   DO NOT keep these sample tasks in the generated tasks.md file.
   ============================================================================
@@ -46,11 +43,12 @@ description: "Task list template for feature implementation"
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-**Purpose**: Project initialization and basic structure
+**Purpose**: Project initialization, quality tooling, and basic structure
 
 - [ ] T001 Create project structure per implementation plan
 - [ ] T002 Initialize [language] project with [framework] dependencies
-- [ ] T003 [P] Configure linting and formatting tools
+- [ ] T003 [P] Configure linting and formatting tools (enforce zero warnings - Constitution I)
+- [ ] T004 [P] Setup code quality scanning (e.g., SonarQube, ESLint, pre-commit hooks)
 
 ---
 
