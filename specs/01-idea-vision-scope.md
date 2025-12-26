@@ -181,149 +181,135 @@ FinWise occupies the middle ground: AI-powered intelligence with human-like pers
 
 ---
 
-## Initial Functional Requirements
+## Functional Requirements
 
-### Core System Requirements
+### Sub-module requirements
 
-**FR-1: User Profile Management**
-- System shall conduct interactive questionnaires to assess user risk tolerance (aggressive, moderate, conservative spectrum)
-- System shall assess investment goals, timeframes (multiple simultaneous horizons from several months to several years), and financial situation
-- System shall generate and store structured user profiles in a database, identified by user ID/username
-- System shall allow users to update their profiles at any time
-- System shall skip questionnaire for returning users with existing profiles
-- System shall adapt profile over time based on user decisions and stated risk tolerance changes (After confirming with the user)
+**FR-1: Multi-Agent Orchestration**
+- **Priority**: P1 (High)
+- **Rationale**: Specialized agents may recommend contradictory actions
+- **High-Level Specification**:
+  - System shall coordinate specialized agents through an orchestrator agent
+  - System shall manage conversation context across agent interactions
+  - System shall resolve conflicts between specialized agent recommendations by presenting options to user with explanations
+  - System shall maintain coherent multi-turn conversations with users
+  - System shall route user queries to appropriate specialized agents
+  - When agents conflict, orchestrator must identify the nature of conflict
+  - Orchestrator must present both/all recommendations with full explanations
+  - User must be given clear decision options
 
-**FR-2: Global Investment Advisory**
-- System shall provide high-level investment direction across asset classes: stocks, residential real estate, bank savings accounts, and other alternatives
-- System shall tailor recommendations to user risk profile and investment horizons
-- System shall explain rationale for preferring one asset class over another for specific user situations
-- System shall leverage external financial knowledge bases through MCP servers
-
-**FR-3: Stock Fundamentals Analysis**
-- System shall provide detailed analysis of individual stocks based on fundamental analysis principles
-- System shall recommend long-term stock investments (several months to several years horizon)
-- System shall exclude day-trading and short-term speculation recommendations
-- System shall access real-time and historical stock market data through financial MCP servers
-- System shall provide explanations for stock recommendations grounded in financial metrics
-
-**FR-4: Real Estate Investment Guidance**
-- System shall provide residential real estate investment recommendations across all US states
-- System shall analyze residential property investment opportunities (excludes commercial real estate in initial scope)
-- System shall access real estate market data through specialized MCP servers
-- System shall explain real estate recommendations with market context and investment rationale
-
-**FR-5: Risk Management & Portfolio Assessment**
-- System shall evaluate user portfolio composition for risk alignment with stated profile
-- System shall identify when portfolio becomes misaligned with user risk tolerance
-- System shall recommend diversification strategies when concentration risk is detected
-- System shall alert users to significant risk factors in their investment choices
-
-**FR-6: Stock Purchase Execution**
-- System shall facilitate stock purchase recommendations based on coordinated agent analysis
-- System shall require explicit user approval before any purchase action
-- System shall present clear purchase recommendations with reasoning and risk assessment
-- System shall confirm transactions with users and provide documentation
-
-**FR-7: Multi-Agent Orchestration**
-- System shall coordinate specialized agents through an orchestrator agent
-- System shall manage conversation context across agent interactions
-- System shall resolve conflicts between specialized agent recommendations by presenting options to user with explanations
-- System shall maintain coherent multi-turn conversations with users
-- System shall route user queries to appropriate specialized agents
-
-**FR-8: Educational & Explanatory Content**
-- System shall explain "why" behind every recommendation, not just "what" to do
-- System shall provide educational context about investment strategies being suggested
-- System shall help users understand investment concepts relevant to their decisions
-- System shall build user knowledge progressively throughout interactions
-
-**FR-9: External Knowledge Integration**
-- System shall integrate with third-party financial data MCP servers for market data
-- System shall integrate with real estate data MCP servers for property market information
-- System shall integrate with news/sentiment analysis MCP servers for market sentiment context
-- System shall handle MCP server unavailability gracefully with appropriate user messaging
-
-**FR-10: Multi-Client Accessibility**
-- System shall be accessible through MCP-compatible clients (Claude, ChatGPT, GitHub Copilot, etc.)
-- System shall support a custom web application interface
-- System shall maintain consistent functionality across different client interfaces
-
----
-
-## Functional Specifications
-
-### Critical Requirements
-
-**CR-1: User Profile Persistence & Evolution**
+**FR-2: User Profile Management**
 - **Priority**: P0 (Critical)
 - **Rationale**: Profile accuracy is foundational to all personalized recommendations
-- **Specification**:
+- **High-Level Specification**:
+  - System shall conduct interactive questionnaires to assess user risk tolerance (aggressive, moderate, conservative spectrum)
+  - System shall assess investment goals, timeframes (multiple simultaneous horizons from several months to several years), and financial situation
+  - System shall generate and store structured user profiles in a database, identified by user ID/username
+  - System shall allow users to update their profiles at any time
+  - System shall skip questionnaire for returning users with existing profiles
+  - System shall adapt profile over time based on user decisions and stated risk tolerance changes (After confirming with the user)
   - Profile database must store data such as: user ID, risk tolerance score, investment goals, timeframes, financial situation, questionnaire responses, creation date, last updated date (TBD: The final profile table template to be filled will be provided in the more detailed feature's specs)
   - Questionnaire must include minimum 8-10 questions covering risk scenarios, investment knowledge, financial goals, and time horizons
   - System must validate profile completeness before allowing access to specialized agents
-
-**CR-2: Explainability & Educational Value**
-- **Priority**: P0 (Critical)
-- **Rationale**: Trust and user learning depend on transparent reasoning
-- **Specification**:
-  - Every recommendation must include: reasoning (why), risk factors (what could go wrong), and educational context (relevant concepts)
-  - Explanations must be tailored to user's demonstrated knowledge level (from profile)
-  - Technical terms must be defined on first use
-  - Comparisons between options must highlight key differentiating factors
-
-**CR-3: Multi-Horizon Investment Handling**
-- **Priority**: P0 (Critical)
-- **Rationale**: Users have different goals with different timeframes
-- **Specification**:
   - System must support simultaneous recommendations for short-term (several months), medium-term (1-3 years), and long-term (3+ years) goals
   - Each recommendation must specify which investment horizon it addresses
   - Portfolio composition must consider all active horizons
   - Risk assessment must account for different risk tolerances across different timeframes
 
-**CR-4: User Approval for Transactions**
-- **Priority**: P0 (Critical)
-- **Rationale**: Regulatory safety and user trust require explicit consent
-- **Specification**:
-  - No financial transaction shall be executed without explicit user approval
-  - Approval interface must display: investment details, amount, rationale, risk assessment, and estimated fees
-  - User must actively confirm (not default approve)
-  - System must log all approval/rejection decisions with timestamps
-
-**CR-5: Risk-Aligned Recommendations**
+**FR-3: Global Investment Advisory**
 - **Priority**: P1 (High)
 - **Rationale**: Core value proposition is personalized guidance matching user risk tolerance
-- **Specification**:
+- **High-Level Specification**:
+  - System shall provide high-level investment direction across asset classes: stocks, residential real estate, bank savings accounts, and other alternatives
+  - System shall tailor recommendations to user risk profile and investment horizons
+  - System shall explain rationale for preferring one asset class over another for specific user situations
+  - System shall leverage external financial knowledge bases through MCP servers
   - All agent recommendations must reference user profile risk tolerance
   - Conservative profiles: prioritize capital preservation, lower volatility, established investments
   - Moderate profiles: balance growth and preservation, diversified approaches
   - Aggressive profiles: emphasize growth potential, accept higher volatility, emerging opportunities
   - Recommendations outside profile range must be clearly flagged with warnings
 
-**CR-6: Orchestrator Conflict Resolution**
-- **Priority**: P1 (High)
-- **Rationale**: Specialized agents may recommend contradictory actions
-- **Specification**:
-  - When agents conflict, orchestrator must identify the nature of conflict
-  - Orchestrator must present both/all recommendations with full explanations
-  - User must be given clear decision options
-
-**CR-7: Real-Time Data Integration**
+**FR-4: Stock Fundamentals Analysis**
 - **Priority**: P1 (High)
 - **Rationale**: Investment recommendations require current market conditions
-- **Specification**:
-  - The system needs to have live context about specific stock values to be proposed. Sometimes a value might be "expensive" or "cheap" in the current market and might or might not be a good investment opportunity.
+- **High-Level Specification**:
+  - System shall provide detailed analysis of individual stocks based on fundamental analysis principles
+  - System shall recommend long-term stock investments (several months to several years horizon)
+  - System shall exclude day-trading and short-term speculation recommendations
+  - System shall access real-time and historical stock market data through financial MCP servers
+  - System shall provide explanations for stock recommendations grounded in financial metrics
+  - The system needs to have live context about specific stock values to be proposed. Sometimes a value might be "expensive" or "cheap" in the current market and might or might not be a good investment opportunity
   - Stock recommendations must use data no older than 24 hours for prices, 1 week for fundamentals
-  - Real estate recommendations must use data no older than 1 week for prices, 1 month for trends
-  - Sentiment analysis must use data no older than 48 hours
 
-**CR-8: Portfolio Context Awareness**
+**FR-5: Real Estate Investment Guidance**
+- **Priority**: P1 (High)
+- **Rationale**: Investment recommendations require current market conditions
+- **High-Level Specification**:
+  - System shall provide residential real estate investment recommendations across all US states
+  - System shall analyze residential property investment opportunities (excludes commercial real estate in initial scope)
+  - System shall access real estate market data through specialized MCP servers
+  - System shall explain real estate recommendations with market context and investment rationale
+  - Real estate recommendations must use data no older than 1 week for prices, 1 month for trends
+
+**FR-6: Risk Management & Portfolio Assessment**
 - **Priority**: P2 (Medium)
 - **Rationale**: Recommendations should consider existing holdings to avoid duplication or excessive concentration
-- **Specification**:
+- **High-Level Specification**:
+  - System shall evaluate user portfolio composition for risk alignment with stated profile
+  - System shall identify when portfolio becomes misaligned with user risk tolerance
+  - System shall recommend diversification strategies when concentration risk is detected
+  - System shall alert users to significant risk factors in their investment choices
   - Users should be able to input current portfolio holdings
   - Risk Management Agent must assess portfolio composition before new recommendations
   - System should warn about sector/asset concentration
   - Diversification recommendations should be specific to user's existing positions
+
+**FR-7: Stock Purchase Execution**
+- **Priority**: P0 (Critical)
+- **Rationale**: Regulatory safety and user trust require explicit consent
+- **High-Level Specification**:
+  - System shall facilitate stock purchase recommendations based on coordinated agent analysis
+  - System shall require explicit user approval before any purchase action
+  - System shall present clear purchase recommendations with reasoning and risk assessment
+  - System shall confirm transactions with users and provide documentation
+  - No financial transaction shall be executed without explicit user approval
+  - Approval interface must display: investment details, amount, rationale, risk assessment, and estimated fees
+  - User must actively confirm (not default approve)
+  - System must log all approval/rejection decisions with timestamps
+
+### Global / cross-cutting requirements
+
+**FR-8: Educational & Explanatory Content**
+- **Priority**: P0 (Critical)
+- **Rationale**: Trust and user learning depend on transparent reasoning
+- **High-Level Specification**:
+  - System shall explain "why" behind every recommendation, not just "what" to do
+  - System shall provide educational context about investment strategies being suggested
+  - System shall help users understand investment concepts relevant to their decisions
+  - System shall build user knowledge progressively throughout interactions
+  - Every recommendation must include: reasoning (why), risk factors (what could go wrong), and educational context (relevant concepts)
+  - Explanations must be tailored to user's demonstrated knowledge level (from profile)
+  - Technical terms must be defined on first use
+  - Comparisons between options must highlight key differentiating factors
+
+**FR-9: External Knowledge Integration**
+- **Priority**: P1 (High)
+- **Rationale**: Investment recommendations require current market conditions and external data sources
+- **High-Level Specification**:
+  - System shall integrate with third-party financial data MCP servers for market data
+  - System shall integrate with real estate data MCP servers for property market information
+  - System shall integrate with news/sentiment analysis MCP servers for market sentiment context
+  - System shall handle MCP server unavailability gracefully with appropriate user messaging
+  - Sentiment analysis must use data no older than 48 hours
+
+**FR-10: Multi-Client Accessibility**
+- **Priority**: P1 (High)
+- **Rationale**: Users should have flexibility in how they access the system
+- **High-Level Specification**:
+  - System shall be accessible through MCP-compatible clients (Claude, ChatGPT, GitHub Copilot, etc.)
+  - System shall support a custom web application interface
+  - System shall maintain consistent functionality across different client interfaces
 
 ---
 
@@ -366,14 +352,16 @@ FinWise envisions a future where every individual, regardless of income or finan
 
 ## Scope: Roadmap Versions
 
-### v0.1: Foundation - Core Agentic Workflow (MVP)
+### v0.1: Foundational - Core Agentic Workflow (MVP)
 
 **Timeline**: Initial proof-of-concept phase
 
 **Objective**: Establish foundational multi-agent architecture with basic investment guidance capabilities
 
-**Agents Implemented**:
-1. **Orchestrator Agent**: Coordinates workflow, manages conversation context, routes queries
+**Features Implemented**:
+
+1. **Multi-agent workflow support**: Workflow open to any number of agents
+1. **Orchestrator Agent**: Like a triage agent, it coordinates workflow, manages conversation context, routes queries
 2. **User Profiling Agent**: Conducts questionnaire, assesses risk tolerance (aggressive vs. conservative), stores profiles in database
 3. **Global Financial Advisor Agent**: Provides high-level recommendations across asset classes (stocks vs. real estate vs. bank accounts vs. other investments)
 
@@ -394,7 +382,7 @@ FinWise envisions a future where every individual, regardless of income or finan
 **Infrastructure**:
 - Profile database implementation
 - Integration with at least one financial data MCP server for basic market context
-- MCP client compatibility (Test with Claude, ChatGPT, or GitHub Copilot)
+- MCP client compatibility (Test with MCP Inspector, Claude, ChatGPT, or GitHub Copilot)
 - Basic orchestration logic for agent coordination
 
 **Success Criteria**:
@@ -409,18 +397,20 @@ FinWise envisions a future where every individual, regardless of income or finan
 **Objective**: Add specialized agents for detailed stock and real estate analysis
 
 **Agents Added**:
-4. **Stock Fundamentals Advisor Agent**: Detailed stock analysis based on fundamental principles, long-term investment recommendations
-5. **Real Estate Investment Advisor Agent**: Residential real estate investment guidance across US markets
+
+1. **Stock Fundamentals Advisor Agent**: Detailed stock analysis based on fundamental principles, long-term investment recommendations
+
+1. **Real Estate Investment Advisor Agent**: Residential real estate investment guidance across US markets
 
 **Epic Coverage**:
 - **Epic 3: Stock Investment Advisory on assets**
-  - Discover stock investment opportunities matching profile
+  - Discover stock investment opportunities, with concrete values (i.e. specific tech stock values such as MSFT, META in NASDAQ, or values from the industry in DOW JONES, etc.) matching the user's profile
   - Understand why specific investments are recommended
   - Detailed fundamental stock analysis and recommendations
   - Sentiment-aware recommendations incorporating market mood
 
 - **Epic 4: Real Estate Investment Advisory on assets**
-  - Discover real estate investment opportunities matching profile
+  - Discover real estate investment opportunities in concrete states and areas, matching user's profile
   - Understand why specific investments are recommended
   - Residential real estate market analysis across US states
   - Sentiment-aware recommendations incorporating market mood
@@ -429,7 +419,7 @@ FinWise envisions a future where every individual, regardless of income or finan
 - Integration with stock market data MCP servers (real-time prices, fundamentals)
 - Integration with real estate data MCP servers (residential property data, market trends)
 - Integration with news/sentiment analysis MCP servers
-- Enhanced orchestrator logic for managing multiple specialized agents
+- Enhanced orchestrator logic by adding the additional specialized agents
 - Cross-agent coordination (Global Advisor → Specialized Advisors workflow)
 
 **Success Criteria**:
@@ -439,16 +429,44 @@ FinWise envisions a future where every individual, regardless of income or finan
 - Users can receive specialized deep-dives after global guidance
 - Agents provide educational value explaining investment concepts
 
-### v0.3: Risk analysis and stock purchase execution - Active Portfolio Management
+### v0.3: Custom UI experience
+
+**Objective**: Provide a custom UI experience with a web application that allows not just chatting but also provides a content UI area to showcase charts/images and also a background logging surfacing the operations executed by agents, going on under the covers.
+
+**Epic Coverage**:
+- **Epic 5: Custom UI application**
+  - Interactive chat interface for natural conversation with agents
+  - Visual content area to display charts, graphs, and financial data visualizations
+  - Background operations log showing agent workflow and decision-making process
+  - Profile management dashboard for viewing and updating user preferences
+  - Investment recommendations display with explanations and risk indicators
+  - Real-time updates as agents process queries and recommendations
+
+**Infrastructure Enhancements**:
+- Web application frontend using a SPA framework (React, Vue, or similar framework)
+- Backend API to interface with MCP server
+- WebSocket or similar technology for real-time agent operation visibility
+- Charting library integration for financial data visualization
+- Session management for multi-turn conversations
+
+**Success Criteria**:
+- Users can interact with all agents through intuitive web interface
+- Visual charts enhance understanding of recommendations
+- Background log provides transparency into agent orchestration
+- Application works seamlessly across different screen sizes
+- User experience is smooth with responsive feedback
+
+### v0.4: Risk analysis and stock purchase execution - Active Portfolio Management
 
 **Objective**: Enable portfolio risk management and facilitated stock purchases with user approval
 
 **Agents Added**:
-6. **Risk Management Agent**: Portfolio risk assessment, diversification recommendations, alerts for profile misalignment
-7. **Stock Purchase Agent**: Facilitates actual stock purchases based on coordinated recommendations, requires user approval
+
+1. **Risk Management Agent**: Portfolio risk assessment, diversification recommendations, alerts for profile misalignment
+1. **Stock Purchase Agent**: Facilitates actual stock purchases based on coordinated recommendations, requires user approval
 
 **Epic Coverage**:
-- **Epic 5: Risk Management**
+- **Epic 6: Risk Management**
   - Risks on recommendations (P1):
     - Receive diversification recommendations
     - Recommendations risk assessment aligned with user profile
@@ -467,7 +485,7 @@ FinWise envisions a future where every individual, regardless of income or finan
     - Users understand risk implications before approving transactions
 
   
-- **Epic 6: Purchase Execution & Monitoring**
+- **Epic 7: Purchase Execution & Monitoring**
   - User reviews stock purchase recommendations
   - Approve or reject proposed transactions
   - Receive transaction confirmations
