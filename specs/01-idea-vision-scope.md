@@ -19,6 +19,7 @@ FinWise employs a multi-agent workflow architecture where specialized AI agents 
 - **Global Financial Advisor Agent**: Provides high-level investment direction across asset classes (stocks, real estate, bank accounts, other alternatives)
 - **Stock Fundamentals Advisor Agent**: Delivers detailed analysis and recommendations for fundamental stock investments based on financial data and market research
 - **Real Estate Investment Advisor Agent**: Offers guidance on residential real estate investment opportunities across the United States
+- **Investment Strategy Summarization Agent**: Synthesizes all advice and chat discussions into comprehensive investment strategy summaries that are persisted in the database with date-title identifiers, allowing users to maintain multiple strategy versions over time
 - **Risk Management Agent**: Evaluates portfolio composition and alerts users to risk concentrations or profile mismatches
 - **Stock Purchase Agent**: Facilitates actual stock purchases based on user approval and coordinated agent recommendations
 
@@ -145,9 +146,9 @@ FinWise occupies the middle ground: AI-powered intelligence with human-like pers
 
 3. **Profile Persistence & Evolution**: User profiles are stored and evolve over time, creating increasingly personalized experiences rather than treating each interaction independently
 
-4. **Cross-Asset Intelligence**: Compares and recommends across stock market and real estate investments (and other pontential areas in the future), helping users understand optimal allocation based on their profile rather than siloing asset classes
+4. **Cross-Asset Intelligence**: Compares and recommends across stock market and real estate investments (and other potential areas in the future), helping users understand optimal allocation based on their profile rather than siloing asset classes
 
-5. **User-Controlled Execution**: Maintains human decision-making authority for all decissions and pontential transactions while providing AI-powered intelligence to inform those decisions, building trust through transparency
+5. **User-Controlled Execution**: Maintains human decision-making authority for all decisions and potential transactions while providing AI-powered intelligence to inform those decisions, building trust through transparency
 
 6. **MCP-Powered Context**: Leverages external and internal knowledge bases through standardized MCP servers, ensuring recommendations stay current with user's profile, market data, financial information, and sentiment trends
 
@@ -185,18 +186,24 @@ FinWise occupies the middle ground: AI-powered intelligence with human-like pers
 
 ### Sub-module requirements
 
-**FR-1: Multi-Agent Orchestration**
+**FR-1: Multi-Agent Workflow with orchestration/triage agent**
 - **Priority**: P1 (High)
-- **Rationale**: Specialized agents may recommend contradictory actions
+- **Rationale**: Multi-agent workflow supporting any number of specialized agents coordinated by an orchestration/triage agent with dynamic routing capabilities
 - **High-Level Specification**:
-  - System shall coordinate specialized agents through an orchestrator agent
+  - System shall coordinate specialized agents through an orchestrator agent on a workflow infrastructure
   - System shall manage conversation context across agent interactions
   - System shall resolve conflicts between specialized agent recommendations by presenting options to user with explanations
   - System shall maintain coherent multi-turn conversations with users
-  - System shall route user queries to appropriate specialized agents
+  - System shall route user queries to appropriate specialized agents dynamically based on user intent
+  - System shall support dynamic workflows where users can return to previously visited agents (e.g., updating user profile after receiving investment advice)
+  - System shall allow non-sequential agent execution, enabling users to switch between agents based on conversation flow rather than fixed steps
+  - System shall support escalation scenarios where an agent can request assistance from other specialized agents
+  - System shall support fallback mechanisms when an agent cannot handle a user query
+  - System shall enable expert handoff where one agent transfers control to a more specialized agent
   - When agents conflict, orchestrator must identify the nature of conflict
   - Orchestrator must present both/all recommendations with full explanations
   - User must be given clear decision options
+  - For the baseline implementation before adding the real agents (User profile management agent and Global Investment Advisory agent), implement a hollow workflow with very basic agents with dynamic handoff capabilities.
 
 **FR-2: User Profile Management**
 - **Priority**: P0 (Critical)
@@ -252,7 +259,20 @@ FinWise occupies the middle ground: AI-powered intelligence with human-like pers
   - System shall explain real estate recommendations with market context and investment rationale
   - Real estate recommendations must use data no older than 1 week for prices, 1 month for trends
 
-**FR-6: Risk Management & Portfolio Assessment**
+**FR-6: Investment Strategy Summarization & Persistence**
+- **Priority**: P1 (High)
+- **Rationale**: Users need coherent strategy summaries to track their evolving investment plans over time
+- **High-Level Specification**:
+  - System shall synthesize all advisory agent recommendations and chat discussions in a session into a comprehensive investment strategy summary
+  - System shall persist strategy summaries in database with unique date-title identifiers
+  - System shall allow users to have multiple strategy versions (e.g., different scenarios, time periods, or plan iterations)
+  - System shall enable users to retrieve, compare, and review historical strategy summaries
+  - Each strategy summary must include: date created, title/label, synthesized recommendations from all agents, user profile snapshot at time of creation, and conversation context
+  - Strategy summaries must be queryable by date, title, or keywords
+  - Users must be able to archive or delete strategy summaries
+  - In future versions of the system, after the system has a custom UI (web app), the user should also be able to directly edit/update any persisted investment strategy.
+
+**FR-7: Risk Management & Portfolio Assessment**
 - **Priority**: P2 (Medium)
 - **Rationale**: Recommendations should consider existing holdings to avoid duplication or excessive concentration
 - **High-Level Specification**:
@@ -265,7 +285,7 @@ FinWise occupies the middle ground: AI-powered intelligence with human-like pers
   - System should warn about sector/asset concentration
   - Diversification recommendations should be specific to user's existing positions
 
-**FR-7: Stock Purchase Execution**
+**FR-8: Stock Purchase Execution**
 - **Priority**: P0 (Critical)
 - **Rationale**: Regulatory safety and user trust require explicit consent
 - **High-Level Specification**:
@@ -280,7 +300,7 @@ FinWise occupies the middle ground: AI-powered intelligence with human-like pers
 
 ### Global / cross-cutting requirements
 
-**FR-8: Educational & Explanatory Content**
+**FR-9: Educational & Explanatory Content**
 - **Priority**: P0 (Critical)
 - **Rationale**: Trust and user learning depend on transparent reasoning
 - **High-Level Specification**:
@@ -293,7 +313,7 @@ FinWise occupies the middle ground: AI-powered intelligence with human-like pers
   - Technical terms must be defined on first use
   - Comparisons between options must highlight key differentiating factors
 
-**FR-9: External Knowledge Integration**
+**FR-10: External Knowledge Integration**
 - **Priority**: P1 (High)
 - **Rationale**: Investment recommendations require current market conditions and external data sources
 - **High-Level Specification**:
@@ -303,7 +323,7 @@ FinWise occupies the middle ground: AI-powered intelligence with human-like pers
   - System shall handle MCP server unavailability gracefully with appropriate user messaging
   - Sentiment analysis must use data no older than 48 hours
 
-**FR-10: Multi-Client Accessibility**
+**FR-11: Multi-Client Accessibility**
 - **Priority**: P1 (High)
 - **Rationale**: Users should have flexibility in how they access the system
 - **High-Level Specification**:
@@ -358,6 +378,8 @@ FinWise envisions a future where every individual, regardless of income or finan
 
 **Objective**: Establish foundational multi-agent architecture with basic investment guidance capabilities
 
+**Note on incremental delivery**: v0.1 can be delivered in slices. For example, the baseline workflow/orchestration may start with in-memory session state and hollow agents, then add database-backed profile persistence in a follow-up slice.
+
 **Features Implemented**:
 
 1. **Multi-agent workflow support**: Workflow open to any number of agents
@@ -400,7 +422,9 @@ FinWise envisions a future where every individual, regardless of income or finan
 
 1. **Stock Fundamentals Advisor Agent**: Detailed stock analysis based on fundamental principles, long-term investment recommendations
 
-1. **Real Estate Investment Advisor Agent**: Residential real estate investment guidance across US markets
+2. **Real Estate Investment Advisor Agent**: Residential real estate investment guidance across US markets
+
+3. **Investment Strategy Summarization Agent**: Synthesizes all advisory recommendations and conversations into persistent strategy summaries
 
 **Epic Coverage**:
 - **Epic 3: Stock Investment Advisory on assets**
@@ -415,12 +439,21 @@ FinWise envisions a future where every individual, regardless of income or finan
   - Residential real estate market analysis across US states
   - Sentiment-aware recommendations incorporating market mood
 
+- **Epic 5: Investment Strategy Summarization**
+  - Generate comprehensive strategy summaries from all agent conversations
+  - Store multiple strategy versions with date-title identifiers
+  - Retrieve and compare historical investment strategies
+  - Track strategy evolution over time
+  - Review past recommendations and decisions
+
 **Infrastructure Enhancements**:
 - Integration with stock market data MCP servers (real-time prices, fundamentals)
 - Integration with real estate data MCP servers (residential property data, market trends)
 - Integration with news/sentiment analysis MCP servers
 - Enhanced orchestrator logic by adding the additional specialized agents
 - Cross-agent coordination (Global Advisor → Specialized Advisors workflow)
+- Strategy summary database schema and persistence layer
+- Strategy summarization logic synthesizing multi-agent conversations
 
 **Success Criteria**:
 - Stock agent provides specific stock recommendations with fundamental analysis
@@ -428,13 +461,16 @@ FinWise envisions a future where every individual, regardless of income or finan
 - Recommendations incorporate current market data and sentiment
 - Users can receive specialized deep-dives after global guidance
 - Agents provide educational value explaining investment concepts
+- Strategy summaries accurately synthesize recommendations from all involved agents
+- Users can generate and save comprehensive strategy summaries from conversations
+- Users can have and retrieve multiple strategy versions over time
 
 ### v0.3: Custom UI experience
 
 **Objective**: Provide a custom UI experience with a web application that allows not just chatting but also provides a content UI area to showcase charts/images and also a background logging surfacing the operations executed by agents, going on under the covers.
 
 **Epic Coverage**:
-- **Epic 5: Custom UI application**
+- **Epic 6: Custom UI application**
   - Interactive chat interface for natural conversation with agents
   - Visual content area to display charts, graphs, and financial data visualizations
   - Background operations log showing agent workflow and decision-making process
@@ -466,7 +502,7 @@ FinWise envisions a future where every individual, regardless of income or finan
 1. **Stock Purchase Agent**: Facilitates actual stock purchases based on coordinated recommendations, requires user approval
 
 **Epic Coverage**:
-- **Epic 6: Risk Management**
+- **Epic 7: Risk Management**
   - Risks on recommendations (P1):
     - Receive diversification recommendations
     - Recommendations risk assessment aligned with user profile
@@ -485,7 +521,7 @@ FinWise envisions a future where every individual, regardless of income or finan
     - Users understand risk implications before approving transactions
 
   
-- **Epic 7: Purchase Execution & Monitoring**
+- **Epic 8: Purchase Execution & Monitoring**
   - User reviews stock purchase recommendations
   - Approve or reject proposed transactions
   - Receive transaction confirmations
