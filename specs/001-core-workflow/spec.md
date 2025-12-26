@@ -9,6 +9,7 @@
 - This feature primarily implements **FR-1** (Multi-Agent Workflow with orchestration/triage agent) from [specs/01-idea-vision-scope.md](../01-idea-vision-scope.md).
 - It also aligns with **FR-11** (Multi-Client Accessibility) by exposing the workflow through an MCP server.
 - Profile persistence (database), deep investment logic, and external market/real-estate data are intentionally **out of scope** for this baseline feature.
+- The architecture MUST be extensible to support additional agent types introduced in the vision (e.g., the **Investment Strategy Summarization Agent** and **FR-6 – Investment Strategy Summarization & Persistence**) in later versions, even though those agents and their persistence concerns are **not implemented** in this feature.
 
 ## User Scenarios & Testing *(mandatory)*
 
