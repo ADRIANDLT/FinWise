@@ -135,7 +135,7 @@ The workflow infrastructure allows new specialized agents to be added without mo
 - The baseline implementation will support dynamic workflow navigation, allowing users to move between agents flexibly rather than following fixed sequential steps
 - While parallel agent execution is deferred, the system will support non-sequential agent switching and revisiting
 - Hollow agents will use an actual AI inference (Language Model) for the PoC, even when they might lack specialized context, though.
-- Context preservation will be managed in-memory for the PoC; persistent storage (like user profile persistence, investment recomendation summary with investment strategy per session and user's portfolio persistence) will be addressed in later iterations or versions of the application.
+- Context preservation will be managed in-memory for the PoC; persistent storage (like user profile persistence, investment recommendation summary with investment strategy per session and user's portfolio persistence) will be addressed in later iterations or versions of the application.
 - The orchestrator will use basic keyword matching for query routing and agent escalation detection in the PoC; more sophisticated NLP can be added later
 - Initial implementation will support single-user, single-session scenarios; concurrent multi-user support is deferred
 - MCP server integration will be demonstrated but hollow agents won't require external data sources initially
