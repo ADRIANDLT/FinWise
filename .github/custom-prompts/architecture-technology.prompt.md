@@ -4,7 +4,7 @@ tools: ['perplexity-ask/perplexity_research', 'perplexity-ask/perplexity_reason'
 description: 'Research an approach to the architecture and technology stack for the project idea.'
 ---
 
-Perform an indepth analysis of the provided fnctional specs/vision/scope, simplified directions on architecture and stack/technologies provided in the docs as part of the context of the prompt.
+Perform an indepth analysis of the provided functional specs/vision/scope, simplified directions on architecture and stack/technologies provided in the docs as part of the context of the prompt.
 
 The goal is to research and provide a simplified and high-level document with multiple alternatives for the Agentic solution architecture and related stack and technologies.
 
