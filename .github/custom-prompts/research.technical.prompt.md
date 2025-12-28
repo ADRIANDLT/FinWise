@@ -18,30 +18,30 @@ Rules:
 - Perform another research loop if asked.
 
 Include the following pivots in your research (Group in major sections):
--Logical architecture
--Software architecture
--Data architecture
--Data flow
--User experience
--Technical requirements
--Design patterns
--Technology stack
--APIs
--SDKs  
--Scalability
--Security
--Performance
--Maintainability
--Extensibility
--Integration
--Testing
--Deployment
--Operations
--Documentation
--Community
--Case studies
--Examples
--Open source projects
+- Logical architecture
+- Software architecture
+- Data architecture
+- Data flow
+- User experience
+- Technical requirements
+- Design patterns
+- Technology stack
+- APIs
+- SDKs
+- Scalability
+- Security
+- Performance
+- Maintainability
+- Extensibility
+- Integration
+- Testing
+- Deployment
+- Operations
+- Documentation
+- Community
+- Case studies
+- Examples
+- Open source projects
 
 
 WHEN DONE, output to #file:../../specs/02.1-research-technical.md
