@@ -1,7 +1,11 @@
 ---
-agent: 'agent'
-tools: ['perplexity-ask/perplexity_research', 'perplexity-ask/perplexity_reason', 'perplexity-ask/perplexity_ask', 'context7/*']
-description: 'Research an idea from a technical perspective, with potential architecture, design and technologies.'
+agent: agent
+tools:
+  - perplexity-ask/perplexity_research
+  - perplexity-ask/perplexity_reason
+  - perplexity-ask/perplexity_ask
+  - context7/*
+description: Research an idea from a technical perspective, with potential architecture, design and technologies.
 ---
 
 Perform an indepth technical analysis of the provided idea, vision-scope and functionality document:
