@@ -6,7 +6,7 @@
 
 ## Glossary
 
-**Hollow Agent**: A simplified or placeholder agent implementation that demonstrates workflow mechanics without full production capabilities. For example, the "hollow Global Advisor Agent" provides generic investment advice ("consider stocks vs. real estate") without accessing real market data or performing deep analysis. Hollow agents validate orchestration patterns while deferring complex domain logic to future iterations.
+**Hollow Agent**: A simplified or placeholder agent implementation that demonstrates workflow mechanics without full production capabilities. Hollow agents use LLM-driven conversation but lack specialized external data sources (no MCP client calls to market data, real estate APIs, or other external knowledge bases). For example, the "Hollow Global Advisor Agent" provides generic investment advice ("consider stocks vs. real estate") using only the LLM's built-in knowledge without accessing real-time market data or performing deep analysis. Hollow agents validate orchestration patterns while deferring complex domain logic and external integrations to future iterations.
 
 ---
 
@@ -16,7 +16,7 @@
 - It also aligns with **FR-11** (Multi-Client Accessibility) by exposing the workflow through an MCP server.
 - Profile persistence (database), deep investment logic, and external market/real-estate data are intentionally **out of scope** for this baseline feature.
 - The architecture MUST be extensible to support additional agent types introduced in the vision (e.g., the **Investment Strategy Summarization Agent**, **Risk Management Agent**, and their associated functional requirements) in later versions, even though those agents and their persistence concerns are **not implemented** in this feature.
-- **Risk Management Agent** is explicitly deferred to **v0.4** as specified in [01-idea-vision-scope.md](../01-idea-vision-scope.md#v04-risk-analysis-and-stock-purchase-execution---active-portfolio-management). This v0.1 baseline focuses on core workflow orchestration without portfolio risk assessment capabilities.
+- **Risk Management Agent** is explicitly deferred to **v0.4** as specified in [01-idea-vision-scope.md](../01-idea-vision-scope.md#v04-risk-analysis-and-stock-purchase-execution---active-portfolio-management) (see [v0.4 scope section](../01-idea-vision-scope.md#v04-risk-analysis-and-stock-purchase-execution---active-portfolio-management) for rationale). This v0.1 baseline focuses on core workflow orchestration without portfolio risk assessment capabilities.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -92,7 +92,7 @@ The workflow infrastructure allows new specialized agents to be added without mo
 
 **Why this priority**: Critical for long-term extensibility but not required for initial PoC functionality.
 
-**Independent Test**: Can be tested by adding a third hollow agent (e.g., a hollow risk agent) and verifying the orchestrator can incorporate it without code changes to orchestration core.
+**Independent Test**: Validated through architecture review of AgentWorkflowBuilder pattern. Adding new agents (e.g., Stock Fundamentals Agent in v0.2, Risk Management Agent in v0.4) requires only: (1) create new ChatClientAgent instance, (2) update WithHandoffs() configuration. No orchestrator core logic changes needed.
 
 **Acceptance Scenarios**:
 
@@ -125,9 +125,9 @@ The workflow infrastructure allows new specialized agents to be added without mo
 - **FR-005**: System MUST allow specialized agents to be registered with the workflow system. **v0.1**: Manual agent registration via code (configure `ChatClientAgent` and add to `AgentWorkflowBuilder`). **v0.2+**: Dynamic registration without modifying orchestrator core logic (plugin architecture).
 - **FR-006**: Orchestrator MUST be able to route user queries to appropriate specialized agent(s) based on dynamic query analysis
 - **FR-007**: Specialized agents MUST respond directly to users when they have the answer (orchestrator manages routing, not response compilation)
-- **FR-008**: System MUST implement a hollow user profile agent for PoC that simulates basic profile gathering (asks 3 questions: risk tolerance, investment goals, timeframe)
-- **FR-009**: System MUST implement a hollow global investment advisor agent for PoC that simulates basic investment advice (provides generic stock vs. real estate guidance)
-- **FR-010**: System MUST handle agent failures gracefully, informing users when an agent cannot complete its task
+- **FR-008**: System MUST implement a User Profile Agent for PoC that simulates basic profile gathering (asks 3 questions: risk tolerance, investment goals, timeframe)
+- **FR-009**: System MUST implement a Global Advisor Agent for PoC that simulates basic investment advice (provides generic stock vs. real estate guidance)
+- **FR-010**: System MUST handle agent failures gracefully, informing users when an agent cannot complete its task. Failure scenarios: (1) Agent timeout after 30 seconds → return "The agent is taking longer than expected. Please try again.", (2) LLM inference error → retry once, if fails return "Unable to process request. Please try again later.", (3) MCP server unavailable → return "Unable to access [service name]. This feature is temporarily unavailable."
 - **FR-011**: System MUST be accessible through MCP-compatible clients as defined in 'FR-11: Multi-Client Accessibility' of the vision document
 - **FR-012**: System MUST log all agent interactions, decisions, handoffs, and routing changes for debugging and transparency
 - **FR-013**: Orchestrator MUST present both agent perspectives when specialized agents provide conflicting information (this is the exception where orchestrator does respond - to present conflicts)
@@ -141,6 +141,7 @@ The workflow infrastructure allows new specialized agents to be added without mo
 
 ### Assumptions
 
+- **Optimistic concurrency conflict resolution**: On concurrency conflict (when updating user profile), system MUST prompt user with "Your profile was updated elsewhere. Would you like to retry with the latest version?" and allow user to review changes before re-submitting.
 - The baseline implementation will support dynamic workflow navigation, allowing users to move between agents flexibly rather than following fixed sequential steps
 - While parallel agent execution is deferred, the system will support non-sequential agent switching and revisiting
 - Hollow agents will use an actual AI inference (Language Model) for the baseline v0.1 implementation, even when they might lack specialized context, though.
@@ -154,7 +155,7 @@ The workflow infrastructure allows new specialized agents to be added without mo
 
 ### Key Entities
 
-- **Agent**: Specialized component in the workflow with specific capabilities (profile management, investment advice, etc.). Implemented as framework `ChatClientAgent` instances with system prompts and tool configurations. Key configuration: agent ID, system prompt, description.
+- **Agent**: Specialized component in the workflow with specific capabilities (profile management, investment advice, etc.). Implemented as framework `ChatClientAgent` instances with system prompts and tool configurations. Examples: Orchestrator Agent, User Profile Agent, Global Advisor Agent. Key configuration: agent ID, system prompt, description.
 
 - **UserProfile** (Persistent Entity): User investment preferences stored in PostgreSQL. Key attributes: user identifier, risk tolerance, investment goals (string), investment timeframe, questionnaire responses (JSONB), version (optimistic concurrency).
 

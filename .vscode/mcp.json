@@ -15,15 +15,6 @@
         }
     ],
     "servers": {
-        "FinWise-Orchestrator-MCP": {
-            "type": "stdio",
-            "command": "dotnet",
-            "args": [
-                "run",
-                "--project",
-                "src/finwise-orchestrator-mcp-server/finwise-orchestrator-mcp-server.csproj"
-            ]
-        },
         "github": {
             "command": "docker",
             "args": [

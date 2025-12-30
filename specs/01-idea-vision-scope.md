@@ -273,7 +273,7 @@ FinWise occupies the middle ground: AI-powered intelligence with human-like pers
   - In future versions of the system, after the system has a custom UI (web app), the user should also be able to directly edit/update any persisted investment strategy.
 
 **FR-7: Risk Management & Portfolio Assessment**
-- **Priority**: P2 (Medium)
+- **Priority**: P3 (Medium)
 - **Rationale**: Recommendations should consider existing holdings to avoid duplication or excessive concentration
 - **High-Level Specification**:
   - System shall evaluate user portfolio composition for risk alignment with stated profile

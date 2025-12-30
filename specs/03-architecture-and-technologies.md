@@ -102,7 +102,7 @@ This staged approach enables learning and validation at each step.
 
 #### Components
 
-**FinWise multi-agent workflow in a MCP Server** (C#/.NET 9):
+**FinWise multi-agent workflow in a MCP Server** (C#/.NET 10):
 - Exposes FinWise AS an MCP server using Microsoft ModelContextProtocol SDK
 - Implements `McpServerTool` attributes on agent operations:
   - `get_investment_recommendations` → routes to Global Advisor Agent (retrieves user profile internally)

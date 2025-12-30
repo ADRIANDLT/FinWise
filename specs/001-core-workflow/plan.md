@@ -1,6 +1,6 @@
 # Implementation Plan: Core Multi-Agent Workflow
 
-**Branch**: `feature/001-core-workflow` | **Date**: December 30, 2025 | **Spec**: [spec.md](spec.md)
+**Branch**: `001-core-workflow` | **Date**: December 30, 2025 | **Spec**: [spec.md](spec.md)
 **Input**: Feature specification from `/specs/001-core-workflow/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/commands/plan.md` for the execution workflow.

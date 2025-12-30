@@ -311,22 +311,25 @@
 
 ### Escalation & Extensibility
 
+**Note**: Extensibility will be validated through the existing three-agent architecture (Orchestrator, User Profile, Global Advisor). 
+
 - [ ] T039 [US3] Implement escalation handling in advisor agent system prompt:
   - System prompt includes: "If asked about specific stocks (MSFT, AAPL, etc.), escalate by saying 'Detailed stock analysis will be available in v0.2. For now, I can provide general guidance on stocks vs real estate.'"
   - No code changes needed - LLM handles escalation detection and response
 
-- [ ] T040 [US4] Add Risk Assessment Agent (extensibility demo) in src/FinWise.Orchestrator/Program.cs:
-  - Create ChatClientAgent: riskAgent with system prompt "You assess investment risk tolerance through questionnaire"
-  - Add to workflow: WithHandoffs(orchestratorAgent, [profileAgent, advisorAgent, riskAgent])
-  - Test: Send "Assess my risk" → orchestrator routes to riskAgent
-  - Demonstrates adding new agents requires only: new ChatClientAgent + update WithHandoffs (zero orchestrator logic changes)
-
-- [ ] T041 [US3] Create escalation and extensibility tests in tests/FinWise.Orchestrator.Tests/AdvancedTests.cs:
+- [ ] T040 [US3,US4] Create escalation and extensibility tests in tests/FinWise.Orchestrator.Tests/AdvancedTests.cs:
   - Test: "Should I buy MSFT stock?" → advisor escalates gracefully
-  - Test: "Assess my risk" → routes to new riskAgent
-  - Test: Adding riskAgent required zero orchestrator code changes (extensibility validation)
+  - **US3 Acceptance Scenario Validation**:
+    - Scenario 1: Global Advisor Agent receives stock-specific query "Should I buy MSFT stock?" → recognizes outside global advisory capability → escalates gracefully
+    - Scenario 2: System informs user "Detailed stock analysis will be available in v0.2. For now, I can provide general guidance on stocks vs real estate."
+    - Scenario 3: Verify escalation provides helpful message explaining limitation and offering alternatives
+    - Scenario 4: Test fallback when no suitable agent exists → provides clear guidance on current capabilities
+  - **US4 Extensibility Validation** (via architecture review, no code changes needed):
+    - Verify AgentWorkflowBuilder pattern allows new agents via: new ChatClientAgent + WithHandoffs() update
+    - Document extensibility pattern in architecture docs for future agent additions (v0.2+ Stock/Real Estate agents, v0.4 Risk Management Agent)
+  - Validates FR-016 (escalation), FR-017 (fallback), US3 acceptance criteria, US4 extensibility architecture
 
-**Checkpoint Implementation Phase 3 Complete**: ✅ All user stories implemented, 4 agents working, dynamic routing, graceful escalation
+**Checkpoint Implementation Phase 3 Complete**: ✅ All user stories implemented, 3 agents working, dynamic routing, graceful escalation
 
 **Validation**: Users can ask any type of query without following fixed steps
 
