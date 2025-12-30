@@ -155,6 +155,14 @@ dotnet build src/FinWise.UserProfile.McpServer/FinWise.UserProfile.McpServer.csp
 
 ---
 
+## Test with MCP Inspector
+
+cd <.NET MCP server MY PROJECT FOLDER>
+
+dotnet build --nologo --verbosity quiet
+
+npx @modelcontextprotocol/inspector dotnet run --no-build
+
 ## Configuration: MCP Client Setup
 
 ### GitHub Copilot (VS Code)

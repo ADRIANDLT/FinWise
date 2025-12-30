@@ -57,6 +57,15 @@
                 "-c",
                 "npm install -g @upstash/context7-mcp@1.0.14 && context7-mcp"
             ]
-        }     
+        },
+        "FinWise-Orchestrator-MCP": {
+            "type": "stdio",
+            "command": "dotnet",
+            "args": [
+                "run",
+                "--project",
+                "src/FinWise.Orchestrator/FinWise.Orchestrator.csproj"
+            ]
+        }
     }
 }
