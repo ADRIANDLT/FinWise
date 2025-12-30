@@ -1,15 +1,22 @@
 # Feature Specification: Core Multi-Agent Workflow
 
-**Feature Branch**: `001-baseline-workflow`  
+**Feature Branch**: `001-core-workflow`  
 **Created**: December 26, 2025  
 **Status**: Draft  
+
+## Glossary
+
+**Hollow Agent**: A simplified or placeholder agent implementation that demonstrates workflow mechanics without full production capabilities. For example, the "hollow Global Advisor Agent" provides generic investment advice ("consider stocks vs. real estate") without accessing real market data or performing deep analysis. Hollow agents validate orchestration patterns while deferring complex domain logic to future iterations.
+
+---
 
 ## Relationship to the Vision Doc
 
 - This feature primarily implements **FR-1** (Multi-Agent Workflow with orchestration/triage agent) from [specs/01-idea-vision-scope.md](../01-idea-vision-scope.md).
 - It also aligns with **FR-11** (Multi-Client Accessibility) by exposing the workflow through an MCP server.
 - Profile persistence (database), deep investment logic, and external market/real-estate data are intentionally **out of scope** for this baseline feature.
-- The architecture MUST be extensible to support additional agent types introduced in the vision (e.g., the **Investment Strategy Summarization Agent** and **FR-6 – Investment Strategy Summarization & Persistence**) in later versions, even though those agents and their persistence concerns are **not implemented** in this feature.
+- The architecture MUST be extensible to support additional agent types introduced in the vision (e.g., the **Investment Strategy Summarization Agent**, **Risk Management Agent**, and their associated functional requirements) in later versions, even though those agents and their persistence concerns are **not implemented** in this feature.
+- **Risk Management Agent** is explicitly deferred to **v0.4** as specified in [01-idea-vision-scope.md](../01-idea-vision-scope.md#v04-risk-analysis-and-stock-purchase-execution---active-portfolio-management). This v0.1 baseline focuses on core workflow orchestration without portfolio risk assessment capabilities.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -115,10 +122,10 @@ The workflow infrastructure allows new specialized agents to be added without mo
 - **FR-002**: System MUST include an orchestrator/triage agent that receives user queries and determines agent routing (orchestrator focuses on routing, not response generation)
 - **FR-003**: System MUST support agent handoff, allowing one agent to transfer control to another while preserving conversation context
 - **FR-004**: System MUST maintain conversation history across all agent interactions within a session
-- **FR-005**: System MUST allow specialized agents to be registered with the workflow system (Ideally even without modifying core orchestration code but for advanced future system's versions, probably not for PoC or initial v0.1 and v0.2 versions).
+- **FR-005**: System MUST allow specialized agents to be registered with the workflow system. **v0.1**: Manual agent registration via code (configure `ChatClientAgent` and add to `AgentWorkflowBuilder`). **v0.2+**: Dynamic registration without modifying orchestrator core logic (plugin architecture).
 - **FR-006**: Orchestrator MUST be able to route user queries to appropriate specialized agent(s) based on dynamic query analysis
 - **FR-007**: Specialized agents MUST respond directly to users when they have the answer (orchestrator manages routing, not response compilation)
-- **FR-008**: System MUST implement a hollow user profile agent for PoC that simulates basic profile gathering (asks 2-3 simple questions)
+- **FR-008**: System MUST implement a hollow user profile agent for PoC that simulates basic profile gathering (asks 3 questions: risk tolerance, investment goals, timeframe)
 - **FR-009**: System MUST implement a hollow global investment advisor agent for PoC that simulates basic investment advice (provides generic stock vs. real estate guidance)
 - **FR-010**: System MUST handle agent failures gracefully, informing users when an agent cannot complete its task
 - **FR-011**: System MUST be accessible through MCP-compatible clients as defined in 'FR-11: Multi-Client Accessibility' of the vision document
@@ -130,6 +137,7 @@ The workflow infrastructure allows new specialized agents to be added without mo
 - **FR-017**: System MUST provide fallback mechanisms when an agent cannot handle a query and no suitable alternative agent exists
 - **FR-018**: System MUST detect and prevent circular escalation patterns (agent A → agent B → agent A) by tracking escalation paths
 - **FR-019**: Orchestrator MUST maintain complete conversation state including visited agents, current agent, and navigation history
+- **FR-020**: System MUST prevent circular handoff patterns via build-time workflow validation (framework's `AgentWorkflowBuilder` enforces valid handoff graph, invalid configurations rejected during `Build()` call)
 
 ### Assumptions
 
@@ -137,7 +145,8 @@ The workflow infrastructure allows new specialized agents to be added without mo
 - While parallel agent execution is deferred, the system will support non-sequential agent switching and revisiting
 - Hollow agents will use an actual AI inference (Language Model) for the baseline v0.1 implementation, even when they might lack specialized context, though.
 - Context preservation will be managed in-memory for the baseline implementation; persistent storage (like user profile persistence, investment recomendation summary with investment strategy per session and user's portfolio persistence) will be addressed in later iterations or versions of the application.
-- The orchestrator will use basic keyword matching for query routing and agent escalation detection in the baseline v0.1 implementation; more sophisticated NLP can be added later
+- **Conversation history scope (v0.1)**: Framework maintains message history during a single workflow execution only (within one MCP tool call). Each MCP tool invocation is stateless - no persistent conversation history across multiple tool calls. Persistent session management deferred to v0.2+.
+- **Routing strategy (all phases)**: The orchestrator will use LLM-only routing (ChatClientAgent system prompts analyze queries to determine which agent to invoke). This is the simplest implementation with zero custom heuristics.
 - Initial implementation will support single-user, single-session scenarios; concurrent multi-user support is deferred
 - MCP server integration will be demonstrated but hollow agents won't require external data sources initially
 - Escalation and fallback mechanisms will be implemented with simple heuristics; advanced AI-based decision making is deferred
@@ -145,17 +154,20 @@ The workflow infrastructure allows new specialized agents to be added without mo
 
 ### Key Entities
 
-- **Agent**: Represents a specialized component in the workflow with specific capabilities (profile management, investment advice, etc.). Key attributes: agent ID, agent type, capabilities description, status (active/inactive), escalation capabilities.
+- **Agent**: Specialized component in the workflow with specific capabilities (profile management, investment advice, etc.). Implemented as framework `ChatClientAgent` instances with system prompts and tool configurations. Key configuration: agent ID, system prompt, description.
 
-- **Conversation Session**: Represents a user's interaction session with the system. Key attributes: session ID, user identifier, start time, conversation history, active agent, visited agents history, navigation path.
+- **UserProfile** (Persistent Entity): User investment preferences stored in PostgreSQL. Key attributes: user identifier, risk tolerance, investment goals (string), investment timeframe, questionnaire responses (JSONB), version (optimistic concurrency).
 
-- **Workflow State**: Represents the current state of the multi-agent workflow execution. Key attributes: current agent, completed agents, pending agents, collected context, workflow status, navigation history, escalation stack.
+- **WorkflowExecutionContext** (Transient): Per-request context for MCP tool invocations. Key attributes: user identifier, query, request timestamp. Discarded after workflow completes.
 
-- **Agent Message**: Represents communication between agents or between agent and user. Key attributes: sender (agent ID or user), recipient (agent ID or user), message content, timestamp, message type (user query, agent response, agent handoff, escalation request).
+**Framework-Managed Entities** (v0.1 - not persisted):
+- **Conversation State**: Managed by framework's `StreamingRun` during workflow execution
+- **Agent Messages**: Managed by framework's `ChatMessage` accumulation
+- **Agent Handoffs**: Configured via `AgentWorkflowBuilder.WithHandoffs()` at build time
+- **Navigation History**: Tracked by framework's `WorkflowEvent` stream
 
-- **Agent Handoff**: Represents a transfer of control from one agent to another. Key attributes: source agent, target agent, handoff reason, handoff type (sequential, back-navigation, escalation, expert transfer), transferred context, handoff timestamp.
-
-- **Navigation History**: Represents the path a user has taken through different agents. Key attributes: session ID, agent sequence, timestamps, transition reasons, context snapshots at each transition.
+**Future Entities** (v0.2+):
+- **Conversation Session**: Persistent conversation history (deferred - v0.1 is stateless per MCP tool call)
 
 ## Success Criteria *(mandatory)*
 
@@ -197,7 +209,6 @@ The workflow infrastructure allows new specialized agents to be added without mo
 
 ### Out of Scope (Deferred to Future Iterations)
 
-- Advanced NLP-based query understanding (baseline uses keyword matching)
 - Parallel agent execution (baseline supports dynamic sequential navigation only)
 - Persistent storage of conversation history (baseline is in-memory)
 - Domain-accurate investment logic and data-grounded recommendations (baseline agents will be LLM-driven, but intentionally "hollow" by probably lacking specialized context)

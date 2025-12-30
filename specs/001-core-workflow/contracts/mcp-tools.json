@@ -1,0 +1,248 @@
+{
+  "$schema": "https://modelcontextprotocol.io/schema/tool-schema-v1.json",
+  "_phase": "Both Implementation Phase 1 and Implementation Phase 2 - Implementation Phase 1 uses in-memory Dictionary, Implementation Phase 2 uses PostgreSQL",
+  "server": {
+    "name": "finwise-orchestrator-mcp-server",
+    "version": "0.1.0",
+    "description": "FinWise multi-agent investment advisor - orchestrates user profile management and investment recommendations through specialized agents. Implementation Phase 1: in-memory profiles. Implementation Phase 2: persistent PostgreSQL profiles."
+  },
+  "tools": [
+    {
+      "name": "get_investment_recommendations",
+      "description": "Get personalized investment recommendations based on user profile (risk tolerance, goals, timeframe). Routes through orchestrator to User Profile Agent and Global Advisor Agent. Returns generic stock vs. real estate guidance in v0.1 (hollow implementation).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Natural language query about investment advice (e.g., 'Should I invest in stocks or real estate?', 'What investments match my risk tolerance?')",
+            "minLength": 10,
+            "maxLength": 1000
+          },
+          "user_identifier": {
+            "type": "string",
+            "description": "Unique user identifier from AI assistant (e.g., Claude user ID, ChatGPT user ID). Used to retrieve or create user profile.",
+            "pattern": "^[a-zA-Z0-9_-]{3,255}$"
+          },
+          "include_reasoning": {
+            "type": "boolean",
+            "description": "If true, include agent routing decisions and handoff reasoning in response (for debugging/transparency)",
+            "default": false
+          }
+        },
+        "required": ["query", "user_identifier"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "recommendation": {
+            "type": "string",
+            "description": "Investment advice from Global Advisor Agent (hollow: generic stock vs. real estate guidance)"
+          },
+          "user_profile_summary": {
+            "type": "object",
+            "description": "Summary of user profile used for recommendations",
+            "properties": {
+              "risk_tolerance": {
+                "type": "string",
+                "enum": ["Conservative", "Moderate", "Aggressive"]
+              },
+              "investment_goals": {
+                "type": "string",
+                "description": "User's investment objectives (free-form text)"
+              },
+              "investment_timeframe": {
+                "type": "string",
+                "enum": ["ShortTerm", "MediumTerm", "LongTerm"]
+              }
+            }
+          },
+          "agent_workflow": {
+            "type": "array",
+            "description": "Sequence of agents invoked (if include_reasoning=true). Observed from framework's WorkflowEvent stream.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "agent": {
+                  "type": "string",
+                  "description": "Agent identifier from ExecutorInvokedEvent"
+                },
+                "action": {
+                  "type": "string",
+                  "description": "What agent did (observed from WorkflowEvent)"
+                },
+                "timestamp": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique request ID for this MCP tool invocation (for logging/tracing)"
+          }
+        },
+        "required": ["recommendation", "user_profile_summary", "request_id"]
+      },
+      "errors": [
+        {
+          "code": "PROFILE_NOT_FOUND",
+          "message": "User profile not found. Please create a profile first using update_user_profile.",
+          "details": "No profile exists for user_identifier. User Profile Agent will prompt for basic information."
+        },
+        {
+          "code": "AGENT_FAILURE",
+          "message": "Unable to generate investment recommendations at this time.",
+          "details": "Global Advisor Agent failed to generate advice (LLM service error or timeout)."
+        },
+        {
+          "code": "WORKFLOW_TIMEOUT",
+          "message": "Investment recommendation request timed out after 10 seconds.",
+          "details": "Multi-agent workflow exceeded performance target (v0.1 target: <10s)."
+        }
+      ]
+    },
+    {
+      "name": "update_user_profile",
+      "description": "Create or update user investment profile (risk tolerance, goals, timeframe). Routes to User Profile Agent which interacts with user to collect questionnaire data. Persists to PostgreSQL via User Profile MCP Server.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "user_identifier": {
+            "type": "string",
+            "description": "Unique user identifier from AI assistant",
+            "pattern": "^[a-zA-Z0-9_-]{3,255}$"
+          },
+          "risk_tolerance": {
+            "type": "string",
+            "description": "User's investment risk tolerance level",
+            "enum": ["Conservative", "Moderate", "Aggressive"]
+          },
+          "investment_goals": {
+            "type": "string",
+            "description": "User's investment objectives as free-form text (1-500 characters)",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "investment_timeframe": {
+            "type": "string",
+            "description": "Investment horizon",
+            "enum": ["ShortTerm", "MediumTerm", "LongTerm"]
+          },
+          "questionnaire_responses": {
+            "type": "object",
+            "description": "Additional questionnaire data (optional, flexible schema)",
+            "additionalProperties": true
+          }
+        },
+        "required": ["user_identifier", "risk_tolerance", "investment_goals", "investment_timeframe"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique profile ID in PostgreSQL"
+          },
+          "user_identifier": {
+            "type": "string",
+            "description": "User identifier (matches input)"
+          },
+          "risk_tolerance": {
+            "type": "string",
+            "enum": ["Conservative", "Moderate", "Aggressive"]
+          },
+          "investment_goals": {
+            "type": "string",
+            "description": "User's investment objectives (free-form text)"
+          },
+          "investment_timeframe": {
+            "type": "string",
+            "enum": ["ShortTerm", "MediumTerm", "LongTerm"]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Profile creation timestamp (if new profile)"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Last modification timestamp"
+          },
+          "version": {
+            "type": "integer",
+            "description": "Profile version number (optimistic concurrency)"
+          },
+          "message": {
+            "type": "string",
+            "description": "Success message from User Profile Agent (e.g., 'Profile created successfully', 'Profile updated')"
+          }
+        },
+        "required": ["profile_id", "user_identifier", "message"]
+      },
+      "errors": [
+        {
+          "code": "VALIDATION_ERROR",
+          "message": "Invalid profile data provided.",
+          "details": "Risk tolerance, goals, or timeframe values do not meet validation rules (e.g., Aggressive + ShortTerm warning)."
+        },
+        {
+          "code": "CONCURRENCY_ERROR",
+          "message": "Profile was modified by another request. Please retry.",
+          "details": "Optimistic concurrency conflict - version mismatch during update."
+        },
+        {
+          "code": "DATABASE_ERROR",
+          "message": "Unable to save user profile at this time.",
+          "details": "User Profile MCP Server failed to write to PostgreSQL."
+        }
+      ]
+    },
+    {
+      "name": "get_conversation_history",
+      "description": "DEFERRED TO v0.3+: Retrieve conversation history. In v0.1, each MCP tool invocation is stateless - no persistent conversation history. Framework manages message flow during workflow execution only. v0.3+ will add a new MCP Server for conversation persistence in Azure Cosmos DB (embeddings, vectors, RAG).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Request ID from previous get_investment_recommendations response (v0.1: not implemented)"
+          }
+        },
+        "required": ["request_id"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "const": "NOT_IMPLEMENTED_V01"
+          },
+          "message": {
+            "type": "string",
+            "const": "Conversation history persistence deferred to v0.3+. Each tool invocation is stateless in v0.1."
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "NOT_IMPLEMENTED",
+          "message": "Conversation history feature not available in v0.1.",
+          "details": "Each MCP tool call is stateless. Persistent conversation history planned for v0.3+ with new Cosmos DB MCP Server."
+        }
+      ]
+    }
+  ],
+  "prompts": [
+    {
+      "name": "investment_advice_prompt",
+      "description": "Example prompt for getting investment recommendations",
+      "template": "I need investment advice. My risk tolerance is {risk_tolerance}, I'm investing for {goals}, and my timeframe is {timeframe}. What should I invest in?"
+    }
+  ]
+}
