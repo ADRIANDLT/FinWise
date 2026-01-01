@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Serilog;
 
 namespace FinWise.Orchestrator;
 
@@ -14,6 +15,7 @@ public class InMemoryUserProfileStore : IUserProfileStore
     public Task<UserProfileDto?> GetProfileAsync(string userId)
     {
         _profiles.TryGetValue(userId, out var profile);
+        Log.Debug("ProfileStore.GetProfileAsync({UserId}): {Result}", userId, profile != null ? "FOUND" : "NOT FOUND");
         return Task.FromResult(profile);
     }
 
@@ -21,19 +23,23 @@ public class InMemoryUserProfileStore : IUserProfileStore
     public Task SetProfileAsync(string userId, UserProfileDto profile)
     {
         _profiles[userId] = profile;
+        Log.Debug("ProfileStore.SetProfileAsync({UserId}): Profile saved. Total profiles in store: {Count}", userId, _profiles.Count);
         return Task.CompletedTask;
     }
 
     /// <inheritdoc/>
     public Task<bool> HasProfileAsync(string userId)
     {
-        return Task.FromResult(_profiles.ContainsKey(userId));
+        var exists = _profiles.ContainsKey(userId);
+        Log.Debug("ProfileStore.HasProfileAsync({UserId}): {Result}", userId, exists);
+        return Task.FromResult(exists);
     }
 
     /// <inheritdoc/>
     public Task DeleteProfileAsync(string userId)
     {
         _profiles.TryRemove(userId, out _);
+        Log.Debug("ProfileStore.DeleteProfileAsync({UserId}): Profile removed. Total profiles in store: {Count}", userId, _profiles.Count);
         return Task.CompletedTask;
     }
 }
