@@ -75,15 +75,15 @@ This staged approach enables learning and validation at each step.
 │ ┌──────────▼──────────┐  ┌─▼──────────────────────┐ │
 │ │ 2.User Profile Agent│  │ 3.Global Advisor Agent │ │
 │ │ (Simple - .NET)     │  │ (Hollow - .NET)        │ │
+│ │     MCP Client      │  │                        │ │
 │ └──────────┬──────────┘  └────────────────────────┘ │
 │            │                                        │
-│            │ MCP Client                             │
-│            │                                        │
-│            ▼                                        │
-│            │ MCP STDIO                              │
+│            │ STDIO                                  │
 │            ▼                                        │
 └─────────────────────────────────────────────────────┘
-                        
+             │
+             │ STDIO
+             ▼                                          
 ┌─────────────────────────────────────────────────────┐
 │ User Profile MCP Server (.NET Process)              │
 │ - Separate process, STDIO transport                 │
