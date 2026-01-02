@@ -14,25 +14,31 @@ public static class Infrastructure
     /// Creates and configures Azure OpenAI chat client from environment variables
     /// Required environment variables:
     /// - AZURE_OPENAI_ENDPOINT: Azure OpenAI endpoint URL
-    /// - AZURE_OPENAI_DEPLOYMENT: Model deployment name
+    /// - AZURE_OPENAI_DEPLOYMENT_NAME: Model deployment name
     /// - AZURE_OPENAI_API_KEY: API key for authentication
     /// </summary>
     public static IChatClient CreateAzureOpenAIChatClient()
     {
-        /*
-        var endpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")
-            ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT environment variable is required");
+        Log.Information("Attempting to load Azure OpenAI configuration from environment variables...");
         
-        var deploymentName = Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT_NAME")
-            ?? throw new InvalidOperationException("AZURE_OPENAI_DEPLOYMENT_NAME environment variable is required");
-        
-        var apiKey = Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY")
-            ?? throw new InvalidOperationException("AZURE_OPENAI_API_KEY environment variable is required");
-        */
+        var endpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT");
+        var deploymentName = Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT_NAME");
+        var apiKey = Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY");
 
-        var endpoint = "https://ai-foundry-cesardl.openai.azure.com/";
-        var deploymentName = "gpt-4o-mini-cesardl-model-deployment";
-        var apiKey = "2ekgfLpxhhZSe4ffl7SvAatL1LFluh1UeoQ11Q4XNuRVko80xispJQQJ99BEACYeBjFXJ3w3AAAAACOGYlnD";
+        // Log what was found (without exposing sensitive data)
+        Log.Information("AZURE_OPENAI_ENDPOINT: {Status}", string.IsNullOrEmpty(endpoint) ? "NOT SET" : "SET");
+        Log.Information("AZURE_OPENAI_DEPLOYMENT_NAME: {Status}", string.IsNullOrEmpty(deploymentName) ? "NOT SET" : "SET");
+        Log.Information("AZURE_OPENAI_API_KEY: {Status}", string.IsNullOrEmpty(apiKey) ? "NOT SET" : "SET");
+
+        // Validate that all required environment variables are set
+        if (string.IsNullOrEmpty(endpoint))
+            throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT environment variable is required");
+        
+        if (string.IsNullOrEmpty(deploymentName))
+            throw new InvalidOperationException("AZURE_OPENAI_DEPLOYMENT_NAME environment variable is required");
+        
+        if (string.IsNullOrEmpty(apiKey))
+            throw new InvalidOperationException("AZURE_OPENAI_API_KEY environment variable is required");
 
         var azureClient = new AzureOpenAIClient(new Uri(endpoint), new AzureKeyCredential(apiKey));
 
@@ -45,18 +51,25 @@ public static class Infrastructure
     }
 
     /// <summary>
-    /// Configures Serilog structured logging to console with JSON output
+    /// Configures Serilog structured logging to console and file
     /// </summary>
     public static void ConfigureLogging()
     {
+        var logPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "FinWise-Orchestrator-MCP", "Logs", "finwise-.log");
+        
         Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Information()
+            .MinimumLevel.Debug()
             .WriteTo.Console(
                 outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
+            .WriteTo.File(logPath,
+                rollingInterval: RollingInterval.Day,
+                outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] {Message:lj}{NewLine}{Exception}")
             .Enrich.FromLogContext()
             .CreateLogger();
 
-        Log.Information("Serilog logging configured");
+        Log.Information("Serilog logging configured. Log file: {LogPath}", logPath);
     }
 
     /// <summary>
