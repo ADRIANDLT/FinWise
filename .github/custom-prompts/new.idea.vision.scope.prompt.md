@@ -40,17 +40,15 @@ FINALLY:
 ### Key differentiators:
 ### Potential business model:
 
-## Initial Functional Requirements
-
-## Functional Specifications
-### Critical Requirements
+## Functional Requirements
 
 ## Vision: Global long term vision
 
 ## Scope: Roadmap Versions
-### v0.1: Foundational agentic workflow with orchestration agent and two specialized agents: One agent for user profiling (aggresive vs. conservative investment) and one agent for global finantial advisor recommendations (Recommending stock investment vs. real state vs. banck-checking account vs. other investments). The specialized agents will make use of an external knowledge base (financial info, etc) through a third party financial MCP server, to provide accurate recommendations. 
-### v0.2: Additional specialized agents: One aget for stock fundamentals investment advisor. Another agent for real state investments advisor. Both specialized agents will make use of external knowledge bases (financial info, real state info, etc) through third party financial and real state MCP servers, to provide accurate recommendations.
-### v0.3: Additional agent for purchasing stock for real based on user profile and recommendations from other agents. Also an agent for risk management.
+### v0.1: Foundational agentic workflow with orchestration agent and two specialized agents: One agent for user profiling (aggresive vs. conservative investment) and one agent for global financial advisor recommendations (Recommending stock investment vs. real estate vs. banck-checking account vs. other investments). The specialized agents will make use of an external knowledge base (financial info, etc) through a third party financial MCP server, to provide accurate recommendations. 
+### v0.2: Additional specialized agents: One agent for stock fundamentals investment advisor. Another agent for real estate investments advisor. Both specialized agents will make use of external knowledge bases (financial info, real estate info, etc) through third party financial and real estate MCP servers, to provide accurate recommendations.
+### v0.3: Add custom UI experience for user to interact with the orchestration agent and specialized agents, based on a visual web app.
+### v0.4: Additional agent for purchasing stock for real based on user profile and recommendations from other agents. Also an agent for risk management.
 
 ### Open to growth criteria. 
 #### Open to additional specialized agents in the future, such as risk advisor agent, crypto investment advisor agent, etc.

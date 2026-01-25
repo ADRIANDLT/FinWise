@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"name": "FinWise",
+			"path": "."
+		}
+	],
+	"settings": {
+		"dotnet.defaultSolution": "FinWise-orchestrator-mcp.sln"
+	}
+}

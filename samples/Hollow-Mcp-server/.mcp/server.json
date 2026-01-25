@@ -1,0 +1,22 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
+  "description": "A FinWise orchestrator MCP server that provides financial tools and services through the Model Context Protocol",
+  "name": "io.github.adriandlt/FinWise-orchestrator-mcp",
+  "version": "0.1.0-beta",
+  "packages": [
+    {
+      "registryType": "nuget",
+      "identifier": "FinWise.Orchestrator.Mcp",
+      "version": "0.1.0-beta",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [],
+      "environmentVariables": []
+    }
+  ],
+  "repository": {
+    "url": "https://github.com/adriandlt/FinWise-orchestrator-mcp",
+    "source": "github"
+  }
+}

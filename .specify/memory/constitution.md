@@ -35,12 +35,10 @@ Follow-up TODOs: None - all TDD references removed
 **Definition**: User-facing features across all platforms (web, mobile, API, CLI) MUST maintain consistent behavior, terminology, and interaction patterns.
 
 **Non-negotiable rules**:
-- All user interactions MUST follow the FinWise interaction design patterns documented in `docs/design-system.md`
 - Financial terminology (e.g., "portfolio", "rebalance", "risk score") MUST be used consistently across all UIs and APIs
 - Error messages MUST be user-friendly and actionable (e.g., "Budget limit exceeded. Reduce purchase amount by $50." not "Error code 403")
 - Loading states, success confirmations, and error recovery flows MUST be identical across web and mobile platforms
 - API responses for the same logical operation MUST return identical data structures regardless of client type
-- User-facing feature changes MUST include updated documentation and user guides (in `/docs/user-guide/`)
 - Accessibility standards (WCAG 2.1 AA minimum) MUST be verified before features ship
 
 **Rationale**: Consistency reduces user confusion, lowers support burden, and builds trust in the FinWise brand. Financial applications must be reliable and predictable—inconsistency erodes confidence.

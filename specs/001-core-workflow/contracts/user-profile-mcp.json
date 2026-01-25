@@ -1,0 +1,349 @@
+{
+  "$schema": "https://modelcontextprotocol.io/schema/tool-schema-v1.json",
+  "_phase": "Implementation Phase 2 ONLY - Not used in Implementation Phase 1 (in-memory Dictionary)",
+  "server": {
+    "name": "user-profile-mcp-server",
+    "version": "0.1.0",
+    "description": "User Profile MCP Server - provides database operations for FinWise user investment profiles (risk tolerance, goals, timeframes). Internal data service consumed by User Profile Agent. IMPLEMENTATION PHASE 2 ONLY: Requires PostgreSQL database and separate process."
+  },
+  "tools": [
+    {
+      "name": "get_user_profile",
+      "description": "Retrieve user investment profile from PostgreSQL by user identifier. Returns profile data including risk tolerance, investment goals, timeframe, and questionnaire responses.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "user_identifier": {
+            "type": "string",
+            "description": "Unique user identifier from AI assistant (e.g., Claude user ID)",
+            "pattern": "^[a-zA-Z0-9_-]{3,255}$"
+          },
+          "include_questionnaire": {
+            "type": "boolean",
+            "description": "Include detailed questionnaire responses (JSONB field)",
+            "default": false
+          }
+        },
+        "required": ["user_identifier"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Profile ID in database"
+          },
+          "user_identifier": {
+            "type": "string",
+            "description": "User identifier (matches input)"
+          },
+          "risk_tolerance": {
+            "type": "string",
+            "enum": ["Conservative", "Moderate", "Aggressive"],
+            "description": "User's investment risk tolerance"
+          },
+          "investment_goals": {
+            "type": "string",
+            "description": "User's investment objectives (free-form text, 1-500 characters)"
+          },
+          "investment_timeframe": {
+            "type": "string",
+            "enum": ["ShortTerm", "MediumTerm", "LongTerm"],
+            "description": "Investment horizon (1-3 years, 3-10 years, 10+ years)"
+          },
+          "questionnaire_responses": {
+            "type": "object",
+            "description": "Additional questionnaire data (if include_questionnaire=true)",
+            "additionalProperties": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Profile creation timestamp"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Last modification timestamp"
+          },
+          "version": {
+            "type": "integer",
+            "description": "Profile version (optimistic concurrency control)"
+          }
+        },
+        "required": ["profile_id", "user_identifier", "risk_tolerance", "investment_goals", "investment_timeframe", "version"]
+      },
+      "errors": [
+        {
+          "code": "PROFILE_NOT_FOUND",
+          "message": "User profile not found for identifier: {user_identifier}",
+          "details": "No profile exists in database for provided user_identifier."
+        },
+        {
+          "code": "DATABASE_CONNECTION_ERROR",
+          "message": "Unable to connect to PostgreSQL database.",
+          "details": "Database connection failed (check connection string, PostgreSQL container status)."
+        }
+      ]
+    },
+    {
+      "name": "save_user_profile",
+      "description": "Create new user investment profile in PostgreSQL. Used when user has no existing profile. Validates risk tolerance, goals, and timeframe alignment before saving.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "user_identifier": {
+            "type": "string",
+            "description": "Unique user identifier from AI assistant",
+            "pattern": "^[a-zA-Z0-9_-]{3,255}$"
+          },
+          "risk_tolerance": {
+            "type": "string",
+            "description": "User's investment risk tolerance level",
+            "enum": ["Conservative", "Moderate", "Aggressive"]
+          },
+          "investment_goals": {
+            "type": "string",
+            "description": "User's investment objectives (free-form text, 1-500 characters)",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "investment_timeframe": {
+            "type": "string",
+            "description": "Investment horizon",
+            "enum": ["ShortTerm", "MediumTerm", "LongTerm"]
+          },
+          "questionnaire_responses": {
+            "type": "object",
+            "description": "Additional questionnaire data (optional)",
+            "additionalProperties": true
+          }
+        },
+        "required": ["user_identifier", "risk_tolerance", "investment_goals", "investment_timeframe"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Newly created profile ID"
+          },
+          "user_identifier": {
+            "type": "string"
+          },
+          "risk_tolerance": {
+            "type": "string",
+            "enum": ["Conservative", "Moderate", "Aggressive"]
+          },
+          "investment_goals": {
+            "type": "string",
+            "description": "User's investment objectives"
+          },
+          "investment_timeframe": {
+            "type": "string",
+            "enum": ["ShortTerm", "MediumTerm", "LongTerm"]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "description": "Initial version (always 1 for new profile)"
+          }
+        },
+        "required": ["profile_id", "user_identifier", "created_at", "version"]
+      },
+      "errors": [
+        {
+          "code": "DUPLICATE_PROFILE",
+          "message": "User profile already exists for identifier: {user_identifier}",
+          "details": "Use update_user_profile instead to modify existing profile."
+        },
+        {
+          "code": "VALIDATION_ERROR",
+          "message": "Invalid profile data provided.",
+          "details": "Risk tolerance, goals, or timeframe validation failed (e.g., Aggressive + ShortTerm warning)."
+        },
+        {
+          "code": "DATABASE_WRITE_ERROR",
+          "message": "Failed to save user profile to database.",
+          "details": "PostgreSQL insert operation failed (check constraints, database permissions)."
+        }
+      ]
+    },
+    {
+      "name": "update_user_profile",
+      "description": "Update existing user investment profile in PostgreSQL. Uses optimistic concurrency control (version number) to prevent conflicting updates. Returns updated profile with incremented version.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Existing profile ID to update"
+          },
+          "user_identifier": {
+            "type": "string",
+            "description": "User identifier (must match profile_id)",
+            "pattern": "^[a-zA-Z0-9_-]{3,255}$"
+          },
+          "risk_tolerance": {
+            "type": "string",
+            "description": "Updated risk tolerance (optional - if null, keeps existing)",
+            "enum": ["Conservative", "Moderate", "Aggressive"]
+          },
+          "investment_goals": {
+            "type": "string",
+            "description": "Updated investment goals (optional - if null, keeps existing, 1-500 characters)",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "investment_timeframe": {
+            "type": "string",
+            "description": "Updated investment horizon (optional - if null, keeps existing)",
+            "enum": ["ShortTerm", "MediumTerm", "LongTerm"]
+          },
+          "questionnaire_responses": {
+            "type": "object",
+            "description": "Updated questionnaire data (optional - merged with existing)",
+            "additionalProperties": true
+          },
+          "expected_version": {
+            "type": "integer",
+            "description": "Current profile version (optimistic concurrency - must match database version)",
+            "minimum": 1
+          }
+        },
+        "required": ["profile_id", "user_identifier", "expected_version"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "user_identifier": {
+            "type": "string"
+          },
+          "risk_tolerance": {
+            "type": "string",
+            "enum": ["Conservative", "Moderate", "Aggressive"]
+          },
+          "investment_goals": {
+            "type": "string",
+            "description": "Current investment objectives"
+          },
+          "investment_timeframe": {
+            "type": "string",
+            "enum": ["ShortTerm", "MediumTerm", "LongTerm"]
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Update timestamp (auto-updated by trigger)"
+          },
+          "version": {
+            "type": "integer",
+            "description": "New profile version (expected_version + 1)"
+          }
+        },
+        "required": ["profile_id", "user_identifier", "updated_at", "version"]
+      },
+      "errors": [
+        {
+          "code": "PROFILE_NOT_FOUND",
+          "message": "User profile not found for ID: {profile_id}",
+          "details": "Profile does not exist or was deleted."
+        },
+        {
+          "code": "CONCURRENCY_ERROR",
+          "message": "Profile version mismatch. Expected version {expected_version}, found {actual_version}.",
+          "details": "Profile was modified by another request. Retrieve latest version and retry."
+        },
+        {
+          "code": "VALIDATION_ERROR",
+          "message": "Invalid profile update data.",
+          "details": "Updated risk tolerance, goals, or timeframe validation failed."
+        },
+        {
+          "code": "DATABASE_UPDATE_ERROR",
+          "message": "Failed to update user profile in database.",
+          "details": "PostgreSQL update operation failed."
+        }
+      ]
+    },
+    {
+      "name": "delete_user_profile",
+      "description": "Delete user investment profile from PostgreSQL. Used for GDPR compliance / user data deletion requests. Soft delete (sets deleted_at timestamp) for audit trail.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Profile ID to delete"
+          },
+          "user_identifier": {
+            "type": "string",
+            "description": "User identifier (must match profile_id for safety)",
+            "pattern": "^[a-zA-Z0-9_-]{3,255}$"
+          },
+          "hard_delete": {
+            "type": "boolean",
+            "description": "If true, permanently delete from database (not recommended). Default: soft delete.",
+            "default": false
+          }
+        },
+        "required": ["profile_id", "user_identifier"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "deleted": {
+            "type": "boolean",
+            "description": "Always true on success"
+          },
+          "deletion_type": {
+            "type": "string",
+            "enum": ["soft", "hard"],
+            "description": "Whether soft delete (sets deleted_at) or hard delete (permanent removal)"
+          },
+          "deleted_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Deletion timestamp (if soft delete)"
+          }
+        },
+        "required": ["profile_id", "deleted", "deletion_type"]
+      },
+      "errors": [
+        {
+          "code": "PROFILE_NOT_FOUND",
+          "message": "User profile not found for ID: {profile_id}",
+          "details": "Profile does not exist or was already deleted."
+        },
+        {
+          "code": "IDENTIFIER_MISMATCH",
+          "message": "User identifier does not match profile.",
+          "details": "Safety check failed - provided user_identifier does not match profile's user_identifier."
+        }
+      ]
+    }
+  ],
+  "resources": [
+    {
+      "uri": "postgresql://user_profiles",
+      "name": "User Profiles Database",
+      "description": "PostgreSQL database table storing user investment profiles",
+      "mimeType": "application/x-postgresql"
+    }
+  ]
+}
