@@ -1,0 +1,28 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch Orchestrator",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/src/FinWise.Orchestrator/bin/Debug/net10.0/FinWise.Orchestrator.dll",
+            "args": [
+                "--urls",
+                "http://127.0.0.1:3923"
+            ],
+            "cwd": "${workspaceFolder}/src/FinWise.Orchestrator",
+            "console": "integratedTerminal",
+            "stopAtEntry": false,
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development"
+            }
+        },
+        {
+            "name": "Attach to MCP Server",
+            "type": "coreclr",
+            "request": "attach",
+            "processName": "FinWise.Orchestrator"
+        }
+    ]
+}

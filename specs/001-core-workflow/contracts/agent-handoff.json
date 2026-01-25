@@ -1,0 +1,359 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Agent Handoff Protocol Schema (Framework Internal Reference)",
+  "description": "REFERENCE ONLY: This schema documents the internal handoff structure managed by Microsoft Agent Framework. In v0.1, handoffs are configured declaratively via AgentWorkflowBuilder and executed automatically by the framework. This file serves as documentation for understanding workflow behavior, not for manual implementation.",
+  "version": "0.1.0",
+  "note": "Framework-managed via AgentWorkflowBuilder.WithHandoffs() - no custom handoff implementation needed in v0.1",
+  "definitions": {
+    "AgentType": {
+      "type": "string",
+      "enum": ["Orchestrator", "UserProfile", "GlobalAdvisor"],
+      "description": "Type of agent in the workflow"
+    },
+    "HandoffType": {
+      "type": "string",
+      "enum": ["Sequential", "BackNavigation", "Escalation", "ExpertTransfer"],
+      "description": "Category of handoff: Sequential (A→B workflow), BackNavigation (return to previous agent), Escalation (needs help), ExpertTransfer (transfer to specialist)"
+    },
+    "AgentMessage": {
+      "type": "object",
+      "properties": {
+        "message_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Unique message identifier"
+        },
+        "session_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Parent conversation session ID"
+        },
+        "sender": {
+          "type": "string",
+          "description": "Sender identifier (user ID or agent name)"
+        },
+        "sender_type": {
+          "type": "string",
+          "enum": ["User", "Agent"],
+          "description": "Message source type"
+        },
+        "agent_type": {
+          "$ref": "#/definitions/AgentType",
+          "description": "If sender is agent, which agent type (required if sender_type=Agent)"
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 10000,
+          "description": "Message text content"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Message creation timestamp"
+        },
+        "message_type": {
+          "type": "string",
+          "enum": ["Query", "Response", "Handoff", "Escalation"],
+          "description": "Message category"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Additional message context (routing decision, handoff reason, etc.)"
+        }
+      },
+      "required": ["message_id", "session_id", "sender", "sender_type", "content", "timestamp", "message_type"]
+    },
+    "HandoffContext": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Parent conversation session ID"
+        },
+        "source_agent": {
+          "$ref": "#/definitions/AgentType",
+          "description": "Agent transferring control"
+        },
+        "target_agent": {
+          "$ref": "#/definitions/AgentType",
+          "description": "Agent receiving control"
+        },
+        "handoff_reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Why handoff occurred (e.g., 'Profile collection complete', 'Needs investment advice')"
+        },
+        "collected_data": {
+          "type": "object",
+          "description": "Data passed to target agent (user profile, preferences, partial results)",
+          "properties": {
+            "user_profile": {
+              "type": "object",
+              "description": "User investment profile (if available)",
+              "properties": {
+                "risk_tolerance": {
+                  "type": "string",
+                  "enum": ["Conservative", "Moderate", "Aggressive"]
+                },
+                "investment_goals": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "investment_timeframe": {
+                  "type": "string",
+                  "enum": ["ShortTerm", "MediumTerm", "LongTerm"]
+                }
+              }
+            },
+            "user_preferences": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Additional user preferences or context"
+            },
+            "partial_results": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Intermediate results from previous agents"
+            }
+          },
+          "additionalProperties": true
+        },
+        "conversation_history": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/AgentMessage"
+          },
+          "maxItems": 10,
+          "description": "Last N messages for context continuity (limited to 10 for performance)"
+        },
+        "handoff_timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When context was created"
+        }
+      },
+      "required": ["session_id", "source_agent", "target_agent", "handoff_reason", "collected_data", "conversation_history", "handoff_timestamp"]
+    },
+    "HandoffRequest": {
+      "type": "object",
+      "description": "Message sent by source agent to initiate handoff",
+      "properties": {
+        "handoff_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Unique handoff identifier"
+        },
+        "handoff_type": {
+          "$ref": "#/definitions/HandoffType",
+          "description": "Category of handoff"
+        },
+        "context": {
+          "$ref": "#/definitions/HandoffContext",
+          "description": "Full handoff context to transfer"
+        },
+        "requested_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When handoff was requested"
+        }
+      },
+      "required": ["handoff_id", "handoff_type", "context", "requested_at"]
+    },
+    "HandoffResponse": {
+      "type": "object",
+      "description": "Message sent by target agent acknowledging handoff",
+      "properties": {
+        "handoff_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Handoff ID (matches request)"
+        },
+        "success": {
+          "type": "boolean",
+          "description": "Whether handoff was accepted"
+        },
+        "error_message": {
+          "type": "string",
+          "description": "If success=false, reason for rejection"
+        },
+        "acknowledged_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When target agent acknowledged handoff"
+        }
+      },
+      "required": ["handoff_id", "success", "acknowledged_at"]
+    },
+    "EscalationRequest": {
+      "type": "object",
+      "description": "Message sent when agent needs to escalate query to another agent",
+      "properties": {
+        "escalation_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Unique escalation identifier"
+        },
+        "from_agent": {
+          "$ref": "#/definitions/AgentType",
+          "description": "Agent requesting escalation"
+        },
+        "to_agent": {
+          "$ref": "#/definitions/AgentType",
+          "description": "Target agent for escalation (if known)"
+        },
+        "escalation_reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Why escalation is needed (e.g., 'Requires detailed stock analysis beyond generic advice')"
+        },
+        "user_query": {
+          "type": "string",
+          "description": "Original user query that triggered escalation"
+        },
+        "context": {
+          "$ref": "#/definitions/HandoffContext",
+          "description": "Full context for escalation handoff"
+        },
+        "escalated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When escalation was requested"
+        }
+      },
+      "required": ["escalation_id", "from_agent", "escalation_reason", "user_query", "context", "escalated_at"]
+    }
+  },
+  "type": "object",
+  "oneOf": [
+    {
+      "$ref": "#/definitions/HandoffRequest",
+      "title": "Handoff Request Message"
+    },
+    {
+      "$ref": "#/definitions/HandoffResponse",
+      "title": "Handoff Response Message"
+    },
+    {
+      "$ref": "#/definitions/EscalationRequest",
+      "title": "Escalation Request Message"
+    }
+  ],
+  "examples": [
+    {
+      "description": "Sequential handoff from User Profile Agent to Global Advisor Agent",
+      "message": {
+        "handoff_id": "550e8400-e29b-41d4-a716-446655440000",
+        "handoff_type": "Sequential",
+        "context": {
+          "session_id": "123e4567-e89b-12d3-a456-426614174000",
+          "source_agent": "UserProfile",
+          "target_agent": "GlobalAdvisor",
+          "handoff_reason": "Profile collection complete, user ready for investment advice",
+          "collected_data": {
+            "user_profile": {
+              "risk_tolerance": "Moderate",
+              "investment_goals": ["Retirement", "WealthBuilding"],
+              "investment_timeframe": "LongTerm"
+            }
+          },
+          "conversation_history": [
+            {
+              "message_id": "msg-001",
+              "session_id": "123e4567-e89b-12d3-a456-426614174000",
+              "sender": "user-123",
+              "sender_type": "User",
+              "content": "I need investment advice",
+              "timestamp": "2025-12-30T14:30:00Z",
+              "message_type": "Query"
+            },
+            {
+              "message_id": "msg-002",
+              "session_id": "123e4567-e89b-12d3-a456-426614174000",
+              "sender": "UserProfile",
+              "sender_type": "Agent",
+              "agent_type": "UserProfile",
+              "content": "Let me gather some information about your investment preferences.",
+              "timestamp": "2025-12-30T14:30:05Z",
+              "message_type": "Response"
+            }
+          ],
+          "handoff_timestamp": "2025-12-30T14:35:00Z"
+        },
+        "requested_at": "2025-12-30T14:35:00Z"
+      }
+    },
+    {
+      "description": "Escalation from Global Advisor Agent to Orchestrator (specific stock query beyond generic advice)",
+      "message": {
+        "escalation_id": "660f9511-f3ac-42e5-b827-557766551111",
+        "from_agent": "GlobalAdvisor",
+        "to_agent": "Orchestrator",
+        "escalation_reason": "User asked about specific stock (MSFT) - requires detailed fundamental analysis beyond generic stock vs. real estate guidance",
+        "user_query": "Should I invest in MSFT stock right now?",
+        "context": {
+          "session_id": "123e4567-e89b-12d3-a456-426614174000",
+          "source_agent": "GlobalAdvisor",
+          "target_agent": "Orchestrator",
+          "handoff_reason": "Escalation: Query requires Stock Fundamentals Agent (not available in v0.1)",
+          "collected_data": {
+            "user_profile": {
+              "risk_tolerance": "Aggressive",
+              "investment_goals": ["WealthBuilding"],
+              "investment_timeframe": "ShortTerm"
+            },
+            "partial_results": {
+              "generic_advice": "For short-term aggressive investing, stocks offer higher growth potential than real estate."
+            }
+          },
+          "conversation_history": [],
+          "handoff_timestamp": "2025-12-30T14:40:00Z"
+        },
+        "escalated_at": "2025-12-30T14:40:00Z"
+      }
+    },
+    {
+      "description": "Back-navigation handoff from Global Advisor to User Profile (user wants to update risk tolerance)",
+      "message": {
+        "handoff_id": "770fa622-g4bd-53f6-c938-668877662222",
+        "handoff_type": "BackNavigation",
+        "context": {
+          "session_id": "123e4567-e89b-12d3-a456-426614174000",
+          "source_agent": "GlobalAdvisor",
+          "target_agent": "UserProfile",
+          "handoff_reason": "User requested profile update mid-conversation (change risk tolerance from Moderate to Aggressive)",
+          "collected_data": {
+            "user_profile": {
+              "risk_tolerance": "Moderate",
+              "investment_goals": ["Retirement"],
+              "investment_timeframe": "LongTerm"
+            },
+            "update_request": {
+              "field": "risk_tolerance",
+              "new_value": "Aggressive"
+            }
+          },
+          "conversation_history": [
+            {
+              "message_id": "msg-010",
+              "session_id": "123e4567-e89b-12d3-a456-426614174000",
+              "sender": "user-123",
+              "sender_type": "User",
+              "content": "Actually, I want to update my risk tolerance to Aggressive",
+              "timestamp": "2025-12-30T14:45:00Z",
+              "message_type": "Query"
+            }
+          ],
+          "handoff_timestamp": "2025-12-30T14:45:05Z"
+        },
+        "requested_at": "2025-12-30T14:45:05Z"
+      }
+    }
+  ]
+}
