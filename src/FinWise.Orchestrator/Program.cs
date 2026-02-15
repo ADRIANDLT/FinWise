@@ -6,9 +6,14 @@ using Microsoft.Agents.AI.Workflows;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Hosting;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Primitives;
 using ModelContextProtocol.Server;
 using Serilog;
@@ -28,11 +33,54 @@ try
     // Initialize Azure OpenAI client
     var chatClient = Infrastructure.CreateAzureOpenAIChatClient();
 
-    // Manual Dependency Injection: Create stores at composition root (Program.cs)
-    IUserProfileStore profileStore = new InMemoryUserProfileStore();
+    // Load configuration
+    var configBuilder = new ConfigurationBuilder()
+        .SetBasePath(AppContext.BaseDirectory)
+        .AddJsonFile("appsettings.json", optional: false)
+        .AddJsonFile($"appsettings.{Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production"}.json", optional: true)
+        .AddEnvironmentVariables();
+    var configuration = configBuilder.Build();
+
+    // Configure CosmosDB options
+    var cosmosDbOptions = new CosmosDbOptions();
+    configuration.GetSection(CosmosDbOptions.SectionName).Bind(cosmosDbOptions);
+
+    // Create profile store based on configuration
+    IUserProfileStore profileStore;
+    if (cosmosDbOptions.Enabled)
+    {
+        Log.Information("Using CosmosDB profile store (Endpoint: {Endpoint}, Database: {Database})",
+            cosmosDbOptions.Endpoint, cosmosDbOptions.DatabaseName);
+
+        var cosmosClientOptions = new CosmosClientOptions();
+        cosmosClientOptions.UseSystemTextJsonSerializerWithOptions = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        };
+        if (cosmosDbOptions.AllowInsecureTls)
+        {
+            Log.Warning("CosmosDB TLS validation disabled - for development use only");
+            cosmosClientOptions.HttpClientFactory = () => new HttpClient(new HttpClientHandler
+            {
+                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+            });
+            cosmosClientOptions.ConnectionMode = ConnectionMode.Gateway;
+        }
+
+        var cosmosClient = new CosmosClient(cosmosDbOptions.Endpoint, cosmosDbOptions.Key, cosmosClientOptions);
+        profileStore = new CosmosDbUserProfileStore(cosmosClient, Options.Create(cosmosDbOptions));
+    }
+    else
+    {
+        Log.Information("Using in-memory profile store");
+        profileStore = new InMemoryUserProfileStore();
+    }
+
+    // Manual Dependency Injection: Create thread store at composition root (Program.cs)
     IThreadStore threadStore = new InMemoryThreadStore();
     AgentThreadManager threadManager = new(threadStore);
-    Log.Information("Initialized in-memory profile and thread stores (using Microsoft Agent Framework AgentThread patterns)");
+    Log.Information("Initialized thread store (using Microsoft Agent Framework AgentThread patterns)");
 
     // Track conversations per MCP session (HTTP transport provides session identifiers)
     var sessionConversations = new ConcurrentDictionary<string, string>(StringComparer.Ordinal);
@@ -52,7 +100,7 @@ try
     Func<string, (AIAgent orchestrator, ChatClientAgent profile, ChatClientAgent advisor, Workflow workflow)> createAgentsAndWorkflow = (conversationId) =>
     {
         Log.Information("Creating agents for ConversationId: {ConversationId}", conversationId);
-        
+
         // Create specialist agents using ChatClientAgent
         ChatClientAgent baseOrchestratorAgent = new(chatClient,
         @"You are a SILENT router. You have ONE job: call a handoff tool/function. You NEVER write text.
@@ -106,6 +154,7 @@ User providing info during profile collection:
 • 'What stocks should I buy?' → advisor_agent
 • 'Show me my profile' → profile_agent
 • 'Change my risk to Aggressive' → profile_agent
+• 'Delete my profile' → profile_agent
 
 ══════════════════════════════════════════════════════════════════
 YOUR OUTPUT MUST BE A TOOL CALL - NO TEXT
@@ -114,7 +163,7 @@ YOUR OUTPUT MUST BE A TOOL CALL - NO TEXT
 You MUST invoke exactly one handoff tool call and output no natural language.
 
 Available handoff functions:
-- handoff_to_profile_agent (profile management: create, view, update, AND new conversations)
+- handoff_to_profile_agent (profile management: create, view, update, delete, AND new conversations)
 - handoff_to_advisor_agent (financial advice ONLY when PROFILE_READY exists)
 
 ⚠️ CRITICAL: If you output ANY words/text besides the tool call, you have FAILED.
@@ -230,7 +279,7 @@ CRITICAL RULES
             .Build();
 
         Log.Information("FinWise workflow initialized with 3 agents for conversation {ConversationId}", conversationId);
-        
+
         return (orchestratorAgent, profileAgent, advisorAgent, workflow);
     };
 
@@ -272,7 +321,7 @@ CRITICAL RULES
     {
         // Generate unique RequestId to trace this request across all workflow operations
         var requestId = Guid.NewGuid().ToString("N")[..8]; // Short 8-char ID for readability
-        
+
         // Push RequestId to Serilog LogContext - all logs within this scope will include it
         using (LogContext.PushProperty("RequestId", requestId))
         {
@@ -296,7 +345,7 @@ CRITICAL RULES
 
                 // Get messages from thread's message store (per framework pattern)
                 var messageStore = currentThread.GetService<InMemoryChatMessageStore>();
-                Log.Debug("MessageStore from thread: {StoreType}, IsNull: {IsNull}", 
+                Log.Debug("MessageStore from thread: {StoreType}, IsNull: {IsNull}",
                     messageStore?.GetType().Name ?? "null", messageStore == null);
                 List<ChatMessage> conversationHistory = messageStore?.ToList() ?? new List<ChatMessage>();
                 Log.Debug("Loaded {Count} messages from messageStore", conversationHistory.Count);
@@ -347,7 +396,7 @@ CRITICAL RULES
                     userMessage = $"My email address is: {emailMatch.Value}";
                     Log.Information("Detected standalone email in query. Augmented to: {AugmentedMessage}", userMessage);
                 }
-                
+
                 // Add user query
                 conversationHistory.Add(new ChatMessage(ChatRole.User, userMessage));
 
@@ -377,7 +426,7 @@ CRITICAL RULES
                         var suspiciousPatterns = new[] { "[function call", "handoff_to_", "[tool call", "I will hand" };
                         if (suspiciousPatterns.Any(p => response.Contains(p, StringComparison.OrdinalIgnoreCase)))
                         {
-                            Log.Warning("Orchestrator emitted text instead of executing handoff. Response: {Response}", 
+                            Log.Warning("Orchestrator emitted text instead of executing handoff. Response: {Response}",
                                 response.Length > 200 ? response[..200] + "..." : response);
                             response = "I'm processing your request. Please try again.";
                         }
@@ -387,7 +436,7 @@ CRITICAL RULES
                 // Persist thread using Microsoft Agent Framework patterns
                 // Use thread.Serialize() to serialize state for storage
                 string persistedUserId = ExtractUserIdFromConversationHistory(conversationHistory) ?? $"anonymous+{Guid.NewGuid():N}";
-                
+
                 // Update the message store in the thread before serialization
                 if (currentThread.GetService<InMemoryChatMessageStore>() is InMemoryChatMessageStore store)
                 {
@@ -397,10 +446,10 @@ CRITICAL RULES
                         store.Add(msg);
                     }
                 }
-                
+
                 await threadManager.PersistThreadAsync(conversationId, currentThread, persistedUserId, conversationHistory.Count);
-                
-                Log.Information("Persisted AgentThread with {MessageCount} messages for conversation {ConversationId} (userId: {UserId}) for session {SessionId}", 
+
+                Log.Information("Persisted AgentThread with {MessageCount} messages for conversation {ConversationId} (userId: {UserId}) for session {SessionId}",
                     conversationHistory.Count, conversationId, persistedUserId, sessionId);
 
                 Log.Information("Request completed successfully");
@@ -414,7 +463,7 @@ CRITICAL RULES
             }
         } // End of LogContext scope
     }
-    
+
     static async Task<(string? Response, List<ChatMessage> Outputs, string? LastExecutor)> ExecuteWorkflowAsync(Workflow workflow, List<ChatMessage> conversationHistory)
     {
         await using StreamingRun run = await InProcessExecution.StreamAsync(workflow, conversationHistory);
@@ -509,21 +558,21 @@ CRITICAL RULES
             .Where(m => m.Role == ChatRole.Assistant && m.Text != null)
             .Select(m => m.Text)
             .FirstOrDefault(text => text!.Contains("PROFILE_READY:", StringComparison.OrdinalIgnoreCase));
-        
+
         if (profileReadyMessage != null)
         {
             // Extract email from "PROFILE_READY: email=<address> ..."
             var emailMatch = System.Text.RegularExpressions.Regex.Match(
-                profileReadyMessage, 
+                profileReadyMessage,
                 @"email=([^\s]+)",
                 System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            
+
             if (emailMatch.Success && emailMatch.Groups.Count > 1)
             {
                 return emailMatch.Groups[1].Value;
             }
         }
-        
+
         return null;
     }
 
@@ -550,6 +599,16 @@ CRITICAL RULES
         }
     }
 
+    // Tool to manage user profiles — routes through the same orchestrator workflow
+    // The orchestrator will direct profile management requests to the profile_agent
+    async Task<string> ManageUserProfile(string query)
+    {
+        Log.Information("MCP Tool invoked: manage_user_profile, delegating to workflow. Query: {Query}", query);
+        // Route through the same orchestrator workflow - the orchestrator will
+        // direct profile management requests to the profile_agent
+        return await GetFinancialAdvice(query);
+    }
+
     // ************** End of local function definitions ************
 
     // Convert to MCP tools
@@ -569,6 +628,14 @@ CRITICAL RULES
             Description = "Clear conversation history for a user to start a fresh conversation."
         });
 
+    McpServerTool profileTool = McpServerTool.Create(
+        ManageUserProfile,
+        new()
+        {
+            Name = "manage_user_profile",
+            Description = "Manage user profiles - view, create, update, or delete. Pass the user's EXACT message as the query - do not modify it. The system handles profile operations through conversation. Examples: 'Show me my profile' → view profile. 'Update my risk tolerance to aggressive' → update profile. 'Delete my profile' → delete profile. 'Create a profile for user@example.com' → create profile. IMPORTANT: On a NEW session (new chat/conversation), the FinWise system WILL ask for the user's email address as the first step - this is expected behavior. You MUST relay the email request back to the user and then pass their email response to this tool. Do NOT skip this step or assume you know the user's email."
+        });
+
     builder.Services
         .AddMcpServer(options =>
         {
@@ -583,7 +650,7 @@ CRITICAL RULES
             httpOptions.Stateless = false;
             httpOptions.IdleTimeout = TimeSpan.FromMinutes(30);
         })
-        .WithTools([adviceTool, resetTool]);
+        .WithTools([adviceTool, resetTool, profileTool]);
 
     var app = builder.Build();
 

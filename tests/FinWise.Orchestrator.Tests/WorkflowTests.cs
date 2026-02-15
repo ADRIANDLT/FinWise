@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using FluentAssertions;
 using FinWise.Orchestrator;
 using Microsoft.Extensions.AI;
+using Moq;
 using Xunit;
 
 namespace FinWise.Orchestrator.Tests;
@@ -31,7 +32,7 @@ public class WorkflowTests
     {
         // Arrange
         var requestTime = DateTime.UtcNow;
-        
+
         // Act
         var context = new WorkflowExecutionContext(
             "user456",
@@ -57,11 +58,11 @@ public class WorkflowTests
         profile1.RiskTolerance.Should().Be("very conservative");
         profile1.InvestmentGoals.Should().Be("save for house down payment");
         profile1.InvestmentTimeframe.Should().Be("about 5 years");
-        
+
         profile2.RiskTolerance.Should().Be("I'm okay with some risk");
         profile2.InvestmentGoals.Should().Be("retirement and kids college");
         profile2.InvestmentTimeframe.Should().Be("15-20 years until retirement");
-        
+
         profile3.RiskTolerance.Should().Be("YOLO aggressive");
         profile3.InvestmentGoals.Should().Be("get rich quick");
         profile3.InvestmentTimeframe.Should().Be("as soon as possible");
@@ -109,7 +110,7 @@ public class WorkflowTests
     {
         // Arrange
         var now = DateTime.UtcNow;
-        
+
         // Act
         var context1 = new WorkflowExecutionContext("user1", "query1", now);
         var context2 = new WorkflowExecutionContext("user2", "query2", now.AddMinutes(5));
@@ -213,5 +214,139 @@ public class WorkflowTests
         stored.InvestmentGoals.Should().Be("Retirement savings");
         stored.InvestmentTimeframe.Should().Be("Long-term");
         stored.IsComplete.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetProfile_ShouldRejectInvalidEmail()
+    {
+        // Arrange
+        var profileStore = new InMemoryUserProfileStore();
+        var agent = new UserProfileAgent(null!, profileStore);
+
+        // Act
+        var result = await agent.GetProfile("not-an-email");
+
+        // Assert
+        result.Should().Contain("ERROR");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task GetProfile_ShouldRejectNullOrEmptyEmail(string? userId)
+    {
+        // Arrange
+        var profileStore = new InMemoryUserProfileStore();
+        var agent = new UserProfileAgent(null!, profileStore);
+
+        // Act
+        var result = await agent.GetProfile(userId!);
+
+        // Assert
+        result.Should().Contain("ERROR");
+    }
+
+    [Fact]
+    public async Task DeleteProfile_ShouldDeleteExistingProfile()
+    {
+        // Arrange
+        var profileStore = new InMemoryUserProfileStore();
+        var agent = new UserProfileAgent(null!, profileStore);
+        await profileStore.SetProfileAsync("user@example.com", new UserProfileDto("user@example.com", "Moderate", "Retirement", "Long-term"));
+
+        // Act
+        var result = await agent.DeleteProfile("user@example.com");
+
+        // Assert
+        result.Should().Contain("DELETED", because: "profile existed and was removed");
+        var stored = await profileStore.GetProfileAsync("user@example.com");
+        stored.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DeleteProfile_ShouldHandleNonexistentProfile()
+    {
+        // Arrange
+        var profileStore = new InMemoryUserProfileStore();
+        var agent = new UserProfileAgent(null!, profileStore);
+
+        // Act
+        var result = await agent.DeleteProfile("nonexistent@example.com");
+
+        // Assert - should handle gracefully (return not-found message)
+        result.Should().NotBeEmpty();
+        result.Should().Contain("NOT_FOUND");
+    }
+
+    [Fact]
+    public async Task DeleteProfile_ShouldRejectInvalidEmail()
+    {
+        // Arrange
+        var profileStore = new InMemoryUserProfileStore();
+        var agent = new UserProfileAgent(null!, profileStore);
+
+        // Act
+        var result = await agent.DeleteProfile("not-an-email");
+
+        // Assert
+        result.Should().Contain("ERROR");
+    }
+
+    [Fact]
+    public async Task DeleteProfile_ShouldDeletePartialProfile()
+    {
+        // Arrange - Profile with only risk tolerance (PARTIAL state)
+        var profileStore = new InMemoryUserProfileStore();
+        var agent = new UserProfileAgent(null!, profileStore);
+        await profileStore.SetProfileAsync("user@example.com", new UserProfileDto("user@example.com", "Moderate", null, null));
+
+        var stored = await profileStore.GetProfileAsync("user@example.com");
+        stored.Should().NotBeNull();
+        stored!.IsComplete.Should().BeFalse("profile is partial");
+
+        // Act
+        var result = await agent.DeleteProfile("user@example.com");
+
+        // Assert
+        result.Should().Contain("DELETED");
+        var afterDelete = await profileStore.GetProfileAsync("user@example.com");
+        afterDelete.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DeleteProfile_ShouldReturnError_WhenStoreThrows()
+    {
+        // Arrange
+        var mockStore = new Mock<IUserProfileStore>();
+        mockStore.Setup(s => s.GetProfileAsync("user@example.com"))
+            .ReturnsAsync(new UserProfileDto("user@example.com", "Moderate", "Goals", "Long-term"));
+        mockStore.Setup(s => s.DeleteProfileAsync("user@example.com"))
+            .ThrowsAsync(new InvalidOperationException("Store connection failed"));
+        var agent = new UserProfileAgent(null!, mockStore.Object);
+
+        // Act
+        var result = await agent.DeleteProfile("user@example.com");
+
+        // Assert
+        result.Should().Contain("ERROR");
+        result.Should().NotContain("Store connection failed", because: "internal error details should not be exposed");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task DeleteProfile_ShouldRejectNullOrEmptyEmail(string? userId)
+    {
+        // Arrange
+        var profileStore = new InMemoryUserProfileStore();
+        var agent = new UserProfileAgent(null!, profileStore);
+
+        // Act
+        var result = await agent.DeleteProfile(userId!);
+
+        // Assert
+        result.Should().Contain("ERROR");
     }
 }
