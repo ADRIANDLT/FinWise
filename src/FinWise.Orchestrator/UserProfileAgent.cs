@@ -10,7 +10,7 @@ public class UserProfileAgent
     private readonly IChatClient _chatClient;
     private readonly IUserProfileStore _profileStore;
 
-    public string Prompt => 
+    public string Prompt =>
         $"""
         You are the User Profile Agent. Your job is to collect user profile information INCREMENTALLY.
 
@@ -22,13 +22,13 @@ public class UserProfileAgent
 
         Follow these steps:
 
-        1. GET USER EMAIL   
+        1. GET USER EMAIL
            - Check if the CURRENT user message IS an email address (contains '@')
            - If current message IS an email, use it and go to step 2
            - Otherwise: Look for email in previous conversation messages
            - No email found? Ask: 'Please provide your email address.'
-           
-        2. CHECK PROFILE STORE   
+
+        2. CHECK PROFILE STORE
            - CALL get_profile(email) to check store
            - Response 'FOUND_COMPLETE': Profile is complete! Output PROFILE_READY marker and answer their question
            - Response 'FOUND_PARTIAL': Profile exists but incomplete. Ask for the missing fields listed
@@ -36,13 +36,13 @@ public class UserProfileAgent
 
         3. COLLECT PROFILE DATA (one question at a time)
            Ask these questions IN ORDER. Accept any answer the user gives - these are free-form fields:
-           
+
            A) Risk Tolerance: 'What is your risk tolerance? (e.g., conservative, moderate, aggressive, or describe in your own words)'
               -> When answered, call set_profile(email, user's answer, "", "")
-           
+
            B) Investment Goals: 'What are your investment goals?'
               -> When answered, call set_profile(email, "", user's answer, "")
-           
+
            C) Investment Timeframe: 'What is your investment timeframe? (e.g., short-term, 5 years, long-term, retirement in 20 years)'
               -> When answered, call set_profile(email, "", "", user's answer)
 
@@ -53,7 +53,7 @@ public class UserProfileAgent
         4. OUTPUT PROFILE_READY MARKER
            When profile is complete, output exactly:
            'PROFILE_READY: email=[EMAIL] risk=[RISK] goals=[GOALS] timeframe=[TIMEFRAME]'
-           
+
            Then IMMEDIATELY answer their original question!
 
         IMPORTANT RULES:
@@ -78,6 +78,18 @@ public class UserProfileAgent
         TOOLS:
         - get_profile(email) - Check if profile exists. Returns FOUND_COMPLETE, FOUND_PARTIAL, or NOT_FOUND
         - set_profile(email, risk, goals, timeframe) - Save/update profile. Pass "" for unknown fields. Returns COMPLETE or PARTIAL
+        - delete_profile(email) - Permanently delete a user profile. Returns DELETED, NOT_FOUND, or ERROR.
+
+        DELETE PROFILE FLOW:
+        1. User asks to delete their profile (e.g., 'Delete my profile', 'Remove my data')
+        2. Verify which email address to delete — ask the user to confirm before proceeding with deletion
+        3. Call delete_profile(email)
+        4. Inform the user of the result: DELETED (success), NOT_FOUND (no profile), or ERROR
+
+        EXAMPLE DELETE FLOW:
+        1. User: 'Delete my profile' -> Check if email is known from conversation -> If not, ask for email
+        2. User: 'john@email.com' -> Confirm: 'Are you sure you want to permanently delete the profile for john@email.com?'
+        3. User: 'Yes' -> Call delete_profile("john@email.com") -> "DELETED: ..." -> Inform the user their profile has been deleted
 
         ANSWERING QUESTIONS (after PROFILE_READY):
         - Use the profile data to give personalized advice
@@ -103,12 +115,19 @@ public class UserProfileAgent
     public async Task<string> GetProfile([Description("The user's email address")] string userId)
     {
         Log.Information("profileAgent tool: GetProfile called for {UserId}", userId);
+
+        if (string.IsNullOrWhiteSpace(userId) || !userId.Contains('@'))
+        {
+            Log.Warning("GetProfile: Invalid userId (email) provided: {UserId}", userId);
+            return "ERROR: Valid email address required";
+        }
+
         var profile = await _profileStore.GetProfileAsync(userId);
         if (profile != null)
         {
-            Log.Information("Profile FOUND for {UserId}: Risk={Risk}, Goals={Goals}, Timeframe={Timeframe}, IsComplete={IsComplete}", 
+            Log.Information("Profile FOUND for {UserId}: Risk={Risk}, Goals={Goals}, Timeframe={Timeframe}, IsComplete={IsComplete}",
                 userId, profile.RiskTolerance, profile.InvestmentGoals, profile.InvestmentTimeframe, profile.IsComplete);
-            
+
             if (profile.IsComplete)
             {
                 return $"FOUND_COMPLETE: email={userId} risk={profile.RiskTolerance} goals={profile.InvestmentGoals} timeframe={profile.InvestmentTimeframe}";
@@ -140,9 +159,9 @@ public class UserProfileAgent
         [Description("User's investment goals (any text describing their financial goals) - pass empty string if not yet provided")] string goals = "",
         [Description("User's investment timeframe (e.g., 'short-term', '5 years', 'long-term', or any description) - pass empty string if not yet provided")] string timeframe = "")
     {
-        Log.Information("profileAgent tool: SetProfile called for {UserId} with Risk={Risk}, Goals={Goals}, Timeframe={Timeframe}", 
+        Log.Information("profileAgent tool: SetProfile called for {UserId} with Risk={Risk}, Goals={Goals}, Timeframe={Timeframe}",
             userId, risk, goals, timeframe);
-        
+
         if (string.IsNullOrWhiteSpace(userId) || !userId.Contains('@'))
         {
             Log.Warning("SetProfile: Invalid userId (email) provided: {UserId}", userId);
@@ -153,7 +172,7 @@ public class UserProfileAgent
         {
             // Get existing profile if any (for incremental updates)
             var existingProfile = await _profileStore.GetProfileAsync(userId);
-            
+
             // Just use the values as-is (free-form text)
             string? riskValue = !string.IsNullOrWhiteSpace(risk) ? risk.Trim() : null;
             string? goalsValue = !string.IsNullOrWhiteSpace(goals) ? goals.Trim() : null;
@@ -169,19 +188,19 @@ public class UserProfileAgent
                     goals: goalsValue,
                     timeframe: timeframeValue
                 );
-                Log.Information("Profile UPDATED for {UserId}: Risk={Risk}, Goals={Goals}, Timeframe={Timeframe}", 
+                Log.Information("Profile UPDATED for {UserId}: Risk={Risk}, Goals={Goals}, Timeframe={Timeframe}",
                     userId, profile.RiskTolerance, profile.InvestmentGoals, profile.InvestmentTimeframe);
             }
             else
             {
                 // Create new profile with whatever data we have
                 profile = new UserProfileDto(userId, riskValue, goalsValue, timeframeValue);
-                Log.Information("Profile CREATED for {UserId}: Risk={Risk}, Goals={Goals}, Timeframe={Timeframe}", 
+                Log.Information("Profile CREATED for {UserId}: Risk={Risk}, Goals={Goals}, Timeframe={Timeframe}",
                     userId, profile.RiskTolerance, profile.InvestmentGoals, profile.InvestmentTimeframe);
             }
 
             await _profileStore.SetProfileAsync(userId, profile);
-            
+
             if (profile.IsComplete)
             {
                 Log.Information("Profile COMPLETE for {UserId}", userId);
@@ -200,7 +219,41 @@ public class UserProfileAgent
         catch (Exception ex)
         {
             Log.Error(ex, "SetProfile failed for {UserId}", userId);
-            return $"ERROR: {ex.Message}";
+            return "ERROR: An unexpected error occurred while saving the profile. Please try again.";
+        }
+    }
+
+    /// <summary>
+    /// Tool: Delete a user profile permanently by email.
+    /// </summary>
+    [Description("Delete a user profile permanently by email. Returns confirmation or error.")]
+    public async Task<string> DeleteProfile([Description("The user's email address")] string userId)
+    {
+        Log.Information("profileAgent tool: DeleteProfile called for {UserId}", userId);
+
+        if (string.IsNullOrWhiteSpace(userId) || !userId.Contains('@'))
+        {
+            Log.Warning("DeleteProfile: Invalid userId (email) provided: {UserId}", userId);
+            return "ERROR: Valid email address required";
+        }
+
+        try
+        {
+            var existing = await _profileStore.GetProfileAsync(userId);
+            if (existing == null)
+            {
+                Log.Warning("DeleteProfile: Profile not found for {UserId}", userId);
+                return $"NOT_FOUND: No profile exists for {userId}.";
+            }
+
+            await _profileStore.DeleteProfileAsync(userId);
+            Log.Information("Profile DELETED for {UserId}", userId);
+            return $"DELETED: Profile for {userId} has been permanently deleted.";
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "DeleteProfile failed for {UserId}", userId);
+            return "ERROR: An unexpected error occurred while deleting the profile. Please try again.";
         }
     }
 
@@ -212,7 +265,8 @@ public class UserProfileAgent
         var tools = new AIFunction[]
         {
             AIFunctionFactory.Create(GetProfile),
-            AIFunctionFactory.Create(SetProfile)
+            AIFunctionFactory.Create(SetProfile),
+            AIFunctionFactory.Create(DeleteProfile)
         };
         return new ChatClientAgent(_chatClient, Prompt, Name, Description, tools: tools);
     }

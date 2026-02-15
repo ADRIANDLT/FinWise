@@ -126,6 +126,13 @@ using (LogContext.PushProperty("RequestId", requestId))
 - Accept any user input; the advisor interprets the values
 - Use `WithUpdates()` for incremental profile updates
 
+### Profile Store Access
+
+- **`IUserProfileStore` (in-memory or CosmosDB) MUST only be accessed through `UserProfileAgent`**
+- `Program.cs` creates the store instance and injects it into `UserProfileAgent` — it must NOT call store methods directly
+- All profile operations (get, set, delete) go through `UserProfileAgent`'s tool methods: `GetProfile`, `SetProfile`, `DeleteProfile`
+- External callers (MCP tools, other agents) interact with profiles via the orchestrator workflow, which routes to `UserProfileAgent`
+
 ### Agent Prompts
 
 - Orchestrator: Silent router, ONLY makes tool calls, never outputs text
