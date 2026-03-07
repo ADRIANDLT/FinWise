@@ -6,12 +6,12 @@
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "build",
-            "program": "${workspaceFolder}/src/FinWise.Orchestrator/bin/Debug/net10.0/FinWise.Orchestrator.dll",
+            "program": "${workspaceFolder}/src/FinWise.McpServer/bin/Debug/net10.0/FinWise.McpServer.dll",
             "args": [
                 "--urls",
-                "http://127.0.0.1:3923"
+                "http://localhost:5000"
             ],
-            "cwd": "${workspaceFolder}/src/FinWise.Orchestrator",
+            "cwd": "${workspaceFolder}/src/FinWise.McpServer",
             "console": "integratedTerminal",
             "stopAtEntry": false,
             "env": {
@@ -22,7 +22,7 @@
             "name": "Attach to MCP Server",
             "type": "coreclr",
             "request": "attach",
-            "processName": "FinWise.Orchestrator"
+            "processName": "FinWise.McpServer"
         }
     ]
 }

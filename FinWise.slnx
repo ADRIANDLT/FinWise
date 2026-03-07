@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FinWise.McpServer/FinWise.McpServer.csproj" />
+    <Project Path="src/FinWise.MultiAgentWorkflow/FinWise.MultiAgentWorkflow.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/FinWise.CosmosDb.IntegrationTests/FinWise.CosmosDb.IntegrationTests.csproj" />
+    <Project Path="tests/FinWise.McpServer.IntegrationTests/FinWise.McpServer.IntegrationTests.csproj" />
+    <Project Path="tests/FinWise.MultiAgentWorkflow.UnitTests/FinWise.MultiAgentWorkflow.UnitTests.csproj" />
+  </Folder>
+</Solution>

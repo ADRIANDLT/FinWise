@@ -56,7 +56,7 @@ To disable CosmosDB and use in-memory storage instead, set `Enabled: false` in y
 ### 4. Run the Application
 
 ```powershell
-dotnet run --project src/FinWise.Orchestrator/ --urls http://127.0.0.1:3923
+dotnet run --project src/FinWise.McpServer/ --urls http://localhost:5000
 ```
 
 The application will automatically create the `FinWise` database and `UserProfiles` container on first use.
@@ -95,7 +95,7 @@ docker compose down -v
 ### Unit Tests (No Emulator Required)
 
 ```powershell
-dotnet test tests/FinWise.Orchestrator.Tests --filter "Category!=Integration&FullyQualifiedName!~EndToEndMcpTests"
+dotnet test tests/FinWise.McpServer.Tests --filter "Category!=Integration&FullyQualifiedName!~EndToEndMcpTests"
 ```
 
 ### Integration Tests (Requires Emulator)
@@ -107,7 +107,7 @@ docker compose up -d
 # Wait for emulator to be ready (about 60 seconds)
 
 # Run integration tests
-dotnet test tests/FinWise.Orchestrator.Tests --filter "Category=Integration"
+dotnet test tests/FinWise.McpServer.Tests --filter "Category=Integration"
 ```
 
 ## Troubleshooting

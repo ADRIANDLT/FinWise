@@ -6,6 +6,6 @@
 		}
 	],
 	"settings": {
-		"dotnet.defaultSolution": "FinWise-orchestrator-mcp.sln"
+		"dotnet.defaultSolution": "FinWise.slnx"
 	}
 }
