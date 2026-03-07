@@ -1,0 +1,20 @@
+{
+	"folders": [
+		{
+			"path": "AIResearch.CLI"
+		},
+		{
+			"path": "AIResearchAgents.Core"
+		},
+		{
+			"path": "../tests/AIResearch.CLI.Tests"
+		},
+		{
+			"path": "../tests/AIResearchAgents.Core.Tests"
+		}
+	],
+	"settings": {
+		"dotnet.defaultSolution": "../AIResearch.slnx",
+		"chat.useNestedAgentsMdFiles": true
+	}
+}
