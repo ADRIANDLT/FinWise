@@ -43,7 +43,7 @@ FinWise is an [MCP](https://modelcontextprotocol.io/) server with three AI agent
    ```
    The MCP server starts at **http://localhost:5000/mcp** (hardcoded default). To use a different URL:
    ```powershell
-   dotnet run --project src/FinWise.McpServer/ --urls http://localhost:6000
+   dotnet run --project src/FinWise.McpServer/ --urls http://localhost:5000
    ```
 
 ### Connect an MCP client
