@@ -7,7 +7,7 @@
             "type": "process",
             "args": [
                 "build",
-                "${workspaceFolder}/FinWise-orchestrator-mcp.sln",
+                "${workspaceFolder}/FinWise.slnx",
                 "/property:GenerateFullPaths=true",
                 "/consoleloggerparameters:NoSummary;ForceNoAlign"
             ],
@@ -23,7 +23,7 @@
             "type": "process",
             "args": [
                 "test",
-                "${workspaceFolder}/tests/FinWise.Orchestrator.Tests/FinWise.Orchestrator.Tests.csproj",
+                "${workspaceFolder}/tests/FinWise.McpServer.Tests/FinWise.McpServer.Tests.csproj",
                 "/property:GenerateFullPaths=true",
                 "/consoleloggerparameters:NoSummary;ForceNoAlign"
             ],
@@ -39,7 +39,7 @@
             "type": "process",
             "args": [
                 "test",
-                "${workspaceFolder}/tests/FinWise.Orchestrator.Tests/FinWise.Orchestrator.Tests.csproj",
+                "${workspaceFolder}/tests/FinWise.McpServer.Tests/FinWise.McpServer.Tests.csproj",
                 "--filter",
                 "FullyQualifiedName~EndToEndMcpTests",
                 "--verbosity",
@@ -55,9 +55,9 @@
             "args": [
                 "run",
                 "--project",
-                "${workspaceFolder}/src/FinWise.Orchestrator/FinWise.Orchestrator.csproj",
+                "${workspaceFolder}/src/FinWise.McpServer/FinWise.McpServer.csproj",
                 "--urls",
-                "http://127.0.0.1:3923"
+                "http://localhost:5000"
             ],
             "problemMatcher": "$msCompile",
             "isBackground": true,
@@ -74,9 +74,9 @@
                 "watch",
                 "run",
                 "--project",
-                "${workspaceFolder}/src/FinWise.Orchestrator/FinWise.Orchestrator.csproj",
+                "${workspaceFolder}/src/FinWise.McpServer/FinWise.McpServer.csproj",
                 "--urls",
-                "http://127.0.0.1:3923"
+                "http://localhost:5000"
             ],
             "problemMatcher": "$msCompile",
             "isBackground": true
@@ -87,7 +87,7 @@
             "type": "process",
             "args": [
                 "clean",
-                "${workspaceFolder}/FinWise-orchestrator-mcp.sln"
+                "${workspaceFolder}/FinWise.slnx"
             ],
             "problemMatcher": "$msCompile"
         },
@@ -97,7 +97,7 @@
             "type": "process",
             "args": [
                 "restore",
-                "${workspaceFolder}/FinWise-orchestrator-mcp.sln"
+                "${workspaceFolder}/FinWise.slnx"
             ],
             "problemMatcher": "$msCompile"
         }

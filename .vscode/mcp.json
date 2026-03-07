@@ -6,29 +6,12 @@
             "id": "perplexity-key",
             "description": "Perplexity API Key",
             "password": true
-        },
-        {
-            "type": "promptString",
-            "id": "github_token_new",
-            "description": "GitHub Personal Access Token",
-            "password": true
         }
     ],
     "servers": {
         "github": {
-            "command": "docker",
-            "args": [
-                "run",
-                "-i",
-                "--rm",
-                "--pull=always",
-                "-e",
-                "GITHUB_PERSONAL_ACCESS_TOKEN",
-                "ghcr.io/github/github-mcp-server"
-            ],
-            "env": {
-                "GITHUB_PERSONAL_ACCESS_TOKEN": "${input:github_token_new}"
-            }
+            "url": "https://api.githubcopilot.com/mcp",
+            "type": "http"
         },
         // https://github.com/ppl-ai/modelcontextprotocol/
         "perplexity-ask": {
@@ -58,9 +41,9 @@
                 "npm install -g @upstash/context7-mcp@1.0.14 && context7-mcp"
             ]
         },
-        "FinWise-Orchestrator-MCP": {
+        "FinWise-MCP-Server": {
             "type": "http",
-            "url": "http://127.0.0.1:3923/mcp"
+            "url": "http://localhost:5000/mcp"
         }
     }
 }

@@ -17,7 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Microsoft.Agents.AI\Microsoft.Agents.AI.csproj" />
+    <PackageReference Include="Microsoft.Agents.AI" />
   </ItemGroup>
-  
+
 </Project>

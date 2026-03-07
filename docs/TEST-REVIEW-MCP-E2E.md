@@ -133,7 +133,7 @@ Reviewed and updated the MCP end-to-end functional tests in `EndToEndMcpTests.cs
 
 1. **Start FinWise Server**:
    ```powershell
-   dotnet run --project src/FinWise.Orchestrator/FinWise.Orchestrator.csproj --urls http://127.0.0.1:3923
+   dotnet run --project src/FinWise.McpServer/FinWise.McpServer.csproj --urls http://localhost:5000
    ```
 
 2. **Configure Azure OpenAI**:
@@ -142,7 +142,7 @@ Reviewed and updated the MCP end-to-end functional tests in `EndToEndMcpTests.cs
 
 3. **Run Tests**:
    ```powershell
-   dotnet test tests/FinWise.Orchestrator.Tests/
+   dotnet test tests/FinWise.McpServer.Tests/
    ```
 
 ---
