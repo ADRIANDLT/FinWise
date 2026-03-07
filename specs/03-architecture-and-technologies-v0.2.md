@@ -39,10 +39,10 @@ This document does NOT cover business requirements, functional specifications, o
 
 FinWise evolves through five architectural variants, each building on its predecessor:
 
-| Version | Deployment | Agents | Storage | Target Audience |
+| Version | Deployment | Agents | Storage | Goal |
 |---------|-----------|--------|---------|-----------------|
-| **v0.1** | Local Windows (monolithic) | 3 agents in-process (.NET 10) | In-memory | POC (historical) |
-| **v0.2** | Local Windows (decoupled) | 3 agents in-process (.NET 10) | In-memory + optional CosmosDB (profiles) | **Current state** |
+| **v0.1** | Local Windows (monolithic) | 3 agents in-process (.NET 10) |  In-memory + optional CosmosDB| POC (historical) |
+| **v0.2** | Local Windows (decoupled projects) | 3 agents in-process (.NET 10) | In-memory + optional CosmosDB (profiles) | **Current state** |
 | **v0.3** | Docker Compose | 6 agents in-process (.NET 10) | PostgreSQL (2 DBs) | Extended PoC |
 | **v0.4** | Azure Container Apps | 6 agents in-process (.NET 10) | PostgreSQL (2 DBs) + Cosmos DB (RAG/chat/embeddings) | Cloud pilot |
 | **v0.5** | Azure Container Apps | 7 distributed agents (.NET 10 + Python) | Same + enhanced Cosmos DB | Cloud pilot |

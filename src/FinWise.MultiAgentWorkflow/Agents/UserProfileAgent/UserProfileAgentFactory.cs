@@ -204,12 +204,12 @@ public class UserProfileAgentFactory
     /// </summary>
     public ChatClientAgent CreateAgent()
     {
-        var tools = new AIFunction[]
+        var actionTools = new AIFunction[]
         {
-            AIFunctionFactory.Create(GetProfile),
-            AIFunctionFactory.Create(SetProfile),
-            AIFunctionFactory.Create(DeleteProfile)
+            AIFunctionFactory.Create(GetProfile, name: "get_profile"),
+            AIFunctionFactory.Create(SetProfile, name: "set_profile"),
+            AIFunctionFactory.Create(DeleteProfile, name: "delete_profile")
         };
-        return new ChatClientAgent(_chatClient, Prompt, Name, Description, tools: tools);
+        return new ChatClientAgent(_chatClient, Prompt, Name, Description, actionTools);
     }
 }
