@@ -137,24 +137,21 @@ Add a **StockSpecializedAgent** as a fourth agent (third spoke) in the existing 
 | Project endpoint | `https://ai-foundry-cesardl.services.ai.azure.com/api/projects/DemoProject/` |
 | Responses API endpoint | `https://ai-foundry-cesardl.services.ai.azure.com/api/projects/DemoProject/applications/stock-specialized-investment-agent/protocols/openai/responses?api-version=2025-11-15-preview` |
 | Grounding | File search on stock documents (Apple, Microsoft annual reports) |
-| Authentication | `DefaultAzureCredential` / `AzureCliCredential` (same as AgenticGuru PoC) |
+| Authentication | **API key** via `api-key` HTTP header (see [Research: API Key Auth](#research-api-key-authentication)) |
 
 ### Dependencies
 
 - **Internal**: `FinWise.MultiAgentWorkflow` (existing project — where the agent lives)
-- **External (new NuGet packages)**:
-  - `Azure.AI.Projects` — Azure Foundry agent SDK (used for `AIProjectClient`, agent discovery)
-  - `Azure.AI.Projects.OpenAI` — OpenAI Responses API client for Foundry agents
-  - `Azure.Identity` — Azure credential management (may already be transitive; verify)
+- **External (new NuGet packages)**: None — the Foundry agent is called directly via `HttpClient` (built-in) with `System.Text.Json` (built-in). No `Azure.AI.Projects`, `Azure.AI.Projects.OpenAI`, or `Azure.Identity` packages needed.
 - **External (existing)**: `Microsoft.Agents.AI`, `Microsoft.Agents.AI.Workflows`
 
 ### Technical Requirements
 
-- [ ] TR-1 — New `Azure.AI.Projects` and `Azure.AI.Projects.OpenAI` packages added to `Directory.Packages.props` and `FinWise.MultiAgentWorkflow.csproj`
+- [ ] TR-1 — No new NuGet packages required — `HttpClient` and `System.Text.Json` are built-in. Remove any unused Azure.AI.Projects references if previously added.
 - [ ] TR-2 — `StockSpecializedAgentFactory` follows existing factory pattern (folder-per-agent, embedded `.prompt.md`, receives dependencies via constructor)
-- [ ] TR-3 — Foundry agent invoked via Azure.AI.Projects SDK (Responses API), following the AgenticGuru PoC `AIToolsResearchAgentRunner` pattern
-- [ ] TR-4 — Configuration via environment variables: `STOCK_AGENT_PROJECT_ENDPOINT`, `STOCK_AGENT_NAME` (same pattern as AgenticGuru's `AIToolsResearchAgentConfig.FromEnvironment()`)
-- [ ] TR-5 — Authentication via `TokenCredential` (injected, supports `DefaultAzureCredential` / `AzureCliCredential`)
+- [ ] TR-3 — Foundry agent invoked via direct HTTP POST to the Responses API endpoint with `api-key` header (not via `AIProjectClient` SDK — that SDK does not support API key auth)
+- [ ] TR-4 — Configuration via environment variables: `STOCK_AGENT_RESPONSES_ENDPOINT` (full Responses API URL) and `STOCK_AGENT_API_KEY` (API key for the Azure AI Services resource)
+- [ ] TR-5 — Authentication via API key (`api-key` HTTP header), stored in environment variable `STOCK_AGENT_API_KEY`. No `TokenCredential` or `Azure.Identity` dependency.
 - [ ] TR-6 — The agent participates in `AgentWorkflow` handoffs (orchestrator can hand off to it, it can hand off back)
 - [ ] TR-6b — AdvisorAgent has a direct handoff path to StockSpecializedAgent for stock-specific escalation (spoke-to-spoke, in addition to spoke-to-hub)
 - [ ] TR-7 — Zero warnings (TreatWarningsAsErrors enforced)
@@ -179,8 +176,8 @@ src/FinWise.MultiAgentWorkflow/
     StockSpecializedAgent/
       StockSpecializedAgent.prompt.md     ← System prompt for the wrapper agent
       StockSpecializedAgentFactory.cs     ← Factory: creates ChatClientAgent + tool
-      FoundryStockAgentRunner.cs          ← SDK wrapper: calls Foundry Responses API
-      FoundryStockAgentConfig.cs          ← Config record (env vars)
+      FoundryStockAgentRunner.cs          ← HTTP wrapper: calls Foundry Responses API with api-key
+      FoundryStockAgentConfig.cs          ← Config record (env vars: endpoint + API key)
 ```
 
 **Data flow:**
@@ -192,7 +189,7 @@ Orchestrator ──handoff_to_stock_agent──▶ StockSpecializedAgent (ChatCl
                                               ▼
                                         query_stock_documents(query)
                                               │
-                                              │ Azure.AI.Projects SDK
+                                              │ HttpClient + api-key header
                                               ▼
                                         Foundry Agent (Responses API)
                                               │
@@ -250,8 +247,8 @@ Environment variables (following AgenticGuru pattern):
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `STOCK_AGENT_PROJECT_ENDPOINT` | Azure AI Foundry project endpoint | `https://ai-foundry-cesardl.services.ai.azure.com/api/projects/DemoProject/` |
-| `STOCK_AGENT_NAME` | Foundry agent application name | `stock-specialized-investment-agent` |
+| `STOCK_AGENT_RESPONSES_ENDPOINT` | Full Responses API URL for the Foundry agent | `https://ai-foundry-cesardl.services.ai.azure.com/api/projects/DemoProject/applications/stock-specialized-investment-agent/protocols/openai/responses?api-version=2025-11-15-preview` |
+| `STOCK_AGENT_API_KEY` | API key for the Azure AI Services resource | (from Azure Portal → AI Services resource → Keys and Endpoint) |
 
 These are read by `FoundryStockAgentConfig.FromEnvironment()` and injected via the composition root (`Program.cs`).
 
@@ -259,14 +256,16 @@ These are read by `FoundryStockAgentConfig.FromEnvironment()` and injected via t
 
 | Approach | Pros | Cons | Decision |
 |----------|------|------|----------|
-| **Tool-based wrapper** (chosen) | Follows existing patterns, simple, testable | Extra LLM call per query | ✅ Best fit for v0.2 POC |
+| **Tool-based wrapper + direct HTTP** (chosen) | Follows existing patterns, simple, testable, no extra SDK dependencies, API key auth | Extra LLM call per query | ✅ Best fit for v0.2 POC |
+| **Tool-based wrapper + Azure.AI.Projects SDK** | Higher-level SDK, retry policies | Does NOT support API key auth (only `TokenCredential`), adds 3 NuGet dependencies | ❌ Rejected — API key auth required |
 | **Custom IChatClient adapter** | Single LLM call, cleaner | Complex to implement, `IChatClient` contract is chat-oriented while Foundry uses Responses API | Deferred — consider for v0.3 optimization |
 | **Custom AIAgent implementation** | Full control, no double-LLM | Bypasses framework abstractions, more code | Deferred — only if framework limitations block tool approach |
 
 ### Open Questions (Technical)
 
-- [ ] Are `Azure.AI.Projects` / `Azure.AI.Projects.OpenAI` package versions compatible with .NET 10? (AgenticGuru uses `1.2.0-beta.5` / `1.0.0-beta.5` on .NET 10 — likely yes)
-- [ ] Should `TokenCredential` be registered in `Program.cs` as a shared singleton (used by both Foundry calls and Azure OpenAI)? Or kept separate?
+- [x] Are `Azure.AI.Projects` / `Azure.AI.Projects.OpenAI` package versions compatible with .NET 10? → **Moot** — these packages are no longer used. The Foundry agent is called directly via `HttpClient`.
+- [x] Should `TokenCredential` be registered in `Program.cs` as a shared singleton? → **Moot** — API key auth is used instead of `TokenCredential`. No `Azure.Identity` dependency.
+- [ ] Should `HttpClient` be a shared singleton via `IHttpClientFactory` or a simple `new HttpClient()`? (Recommend `IHttpClientFactory` for proper connection pooling, but `Program.cs` currently uses manual DI — a singleton `HttpClient` is acceptable for POC)
 
 ---
 
@@ -278,16 +277,16 @@ These are read by `FoundryStockAgentConfig.FromEnvironment()` and injected via t
 - **No Bing grounding** — the Foundry agent uses file search on uploaded stock documents only
 - **No new MCP server or CLI** — integration is purely within `FinWise.MultiAgentWorkflow`
 - **Profile gating required** — stock queries gated behind PROFILE_READY, consistent with all other agents
-- **Follow AgenticGuru PoC pattern** — `AIProjectClient` → `GetProjectResponsesClientForAgent()` → `CreateResponseAsync()` for calling the Foundry agent
+- **Follow AgenticGuru PoC pattern** — Adapted: same Responses API semantics, but using direct `HttpClient` + `api-key` header instead of `AIProjectClient` SDK (SDK does not support API key auth)
 - **Follow existing factory pattern** — folder-per-agent with `.prompt.md`, factory class, embedded resources
 
 ### Implementation Guidance
 
-- **SDK pattern**: Mirror `AIToolsResearchAgentRunner` from AgenticGuru PoC for Foundry agent communication
-- **Config pattern**: Mirror `AIToolsResearchAgentConfig.FromEnvironment()` for environment variable resolution
+- **HTTP call pattern**: Mirror the `AIToolsResearchAgentRunner` semantics from the AgenticGuru PoC, but replace `AIProjectClient` SDK calls with direct `HttpClient` POST to the Responses API endpoint. Send JSON body with `input` field and parse the response's `output` array for text content and annotations.
+- **Config pattern**: Mirror `AIToolsResearchAgentConfig.FromEnvironment()` for environment variable resolution — reads `STOCK_AGENT_RESPONSES_ENDPOINT` and `STOCK_AGENT_API_KEY`
 - **Agent factory pattern**: Mirror `AdvisorAgentFactory` / `UserProfileAgentFactory` for agent creation
-- **Credentials**: Use `TokenCredential` injection (supports `AzureCliCredential` for local dev, `DefaultAzureCredential` for production)
-- **Agent discovery**: Use get-or-fetch pattern (get existing agent by name, no creation)
+- **Credentials**: API key from environment variable — passed via `api-key` HTTP header on every request. Store securely; never log or commit the key.
+- **Agent endpoint**: The Responses API URL is pre-configured (env var), no runtime agent discovery needed
 
 ---
 
@@ -299,32 +298,32 @@ These are read by `FoundryStockAgentConfig.FromEnvironment()` and injected via t
 
 ### Phase 1: Infrastructure & Configuration
 
-- [] Step 1.1 — Add `Azure.AI.Projects` and `Azure.AI.Projects.OpenAI` and `Azure.Identity` (if not already transitive) package references to `Directory.Packages.props` and `FinWise.MultiAgentWorkflow.csproj`
-- [] Step 1.2 — Create `FoundryStockAgentConfig.cs` in `Agents/StockSpecializedAgent/` — a sealed record that reads `STOCK_AGENT_PROJECT_ENDPOINT` and `STOCK_AGENT_NAME` from environment variables, following the `AIToolsResearchAgentConfig` pattern from the AgenticGuru PoC
-- [] Step 1.3 — Create `FoundryStockAgentRunner.cs` in `Agents/StockSpecializedAgent/` — a class that uses `AIProjectClient` to fetch the existing Foundry agent by name and invoke it via the Responses API (`GetProjectResponsesClientForAgent` → `CreateResponseAsync`). Follows the `AIToolsResearchAgentRunner` pattern: factory method `CreateFromConfig(config, credential)`, a `RunAsync(query)` method that returns the Foundry agent's text response. Includes annotation/citation text extraction from the response.
+- [] Step 1.1 — No new NuGet packages required. Verify `FinWise.MultiAgentWorkflow.csproj` already references `System.Text.Json` (or it's implicitly available via the framework). No changes to `Directory.Packages.props`.
+- [] Step 1.2 — Create `FoundryStockAgentConfig.cs` in `Agents/StockSpecializedAgent/` — a sealed record that reads `STOCK_AGENT_RESPONSES_ENDPOINT` and `STOCK_AGENT_API_KEY` from environment variables. Follows the `AIToolsResearchAgentConfig` pattern (static `FromEnvironment()` factory method with validation).
+- [] Step 1.3 — Create `FoundryStockAgentRunner.cs` in `Agents/StockSpecializedAgent/` — a class that uses `HttpClient` to POST to the Foundry agent's Responses API endpoint with `api-key` header. Sends JSON body with `{ "input": [{ "role": "user", "content": "<query>" }] }` and parses the response's `output` array for text content. Includes annotation/citation text extraction. Factory method `CreateFromConfig(config, httpClient)`, a `RunAsync(query)` method that returns the text response.
 
 ### Phase 2: Agent Factory & Prompt
 
 - [] Step 2.1 — Create `StockSpecializedAgent.prompt.md` in `Agents/StockSpecializedAgent/` — system prompt for the wrapper agent. Instructs the agent to always use the `query_stock_documents` tool for any stock-related query and to relay the tool's response (including citations) to the user. The prompt should also instruct it to hand off back to the orchestrator when done.
-- [] Step 2.2 — Create `StockSpecializedAgentFactory.cs` in `Agents/StockSpecializedAgent/` — follows existing factory pattern. Receives `IChatClient`, `FoundryStockAgentConfig`, and `TokenCredential` via constructor. Exposes `Name` ("stock_specialized_agent") and `Description`. The `CreateAgent()` method builds a `ChatClientAgent` with the embedded prompt and registers a `query_stock_documents` tool. The tool internally creates a `FoundryStockAgentRunner` and calls `RunAsync(query)`.
+- [] Step 2.2 — Create `StockSpecializedAgentFactory.cs` in `Agents/StockSpecializedAgent/` — follows existing factory pattern. Receives `IChatClient` and `FoundryStockAgentConfig` via constructor (plus `IHttpClientFactory` or a pre-configured `HttpClient`). Exposes `Name` ("stock_specialized_agent") and `Description`. The `CreateAgent()` method builds a `ChatClientAgent` with the embedded prompt and registers a `query_stock_documents` tool. The tool internally creates a `FoundryStockAgentRunner` and calls `RunAsync(query)`.
 
 ### Phase 3: Workflow Integration
 
 - [] Step 3.1 — Update `OrchestratorAgent.prompt.md` to add routing rules for stock-specific queries. Stock queries route to `stock_specialized_agent` only when PROFILE_READY exists. The routing remains: (1) no PROFILE_READY → profile agent, (2) stock-specific → stock agent, (3) profile intent → profile agent, (4) advice intent → advisor agent.
 - [] Step 3.2 — Update `AdvisorAgent.prompt.md` to add a handoff rule: when the user asks stock-specific data questions (company financials, annual report figures), hand off to `stock_specialized_agent` instead of trying to answer from general knowledge.
-- [] Step 3.3 — Update `FinWiseWorkflowService.cs` to create the `StockSpecializedAgentFactory` and register the stock agent in the handoff topology. The constructor receives `FoundryStockAgentConfig` and `TokenCredential` as additional dependencies. In `CreateAgentsAndWorkflow()`: (a) add the stock agent to the orchestrator's handoff list, (b) register the stock agent → orchestrator handoff, (c) register the advisor agent → stock agent handoff (spoke-to-spoke).
-- [] Step 3.4 — Update `Program.cs` (composition root) to create `FoundryStockAgentConfig.FromEnvironment()`, resolve `TokenCredential`, and pass both to `FinWiseWorkflowService`.
+- [] Step 3.3 — Update `FinWiseWorkflowService.cs` to create the `StockSpecializedAgentFactory` and register the stock agent in the handoff topology. The constructor receives `FoundryStockAgentConfig` and `HttpClient` (or `IHttpClientFactory`) as additional dependencies. In `CreateAgentsAndWorkflow()`: (a) add the stock agent to the orchestrator's handoff list, (b) register the stock agent → orchestrator handoff, (c) register the advisor agent → stock agent handoff (spoke-to-spoke).
+- [] Step 3.4 — Update `Program.cs` (composition root) to create `FoundryStockAgentConfig.FromEnvironment()`, create/configure `HttpClient`, and pass both to `FinWiseWorkflowService`.
 
 ### Phase 4: Testing
 
 - [] Step 4.1 — Write unit tests for `FoundryStockAgentConfig.FromEnvironment()` (validates required env vars, default values)
 - [] Step 4.2 — Write unit tests for `StockSpecializedAgentFactory.CreateAgent()` (verifies agent name, description, tool registration)
-- [] Step 4.3 — Write unit tests for `FoundryStockAgentRunner` (mock `AIProjectClient` to verify correct Foundry API calls and response extraction)
+- [] Step 4.3 — Write unit tests for `FoundryStockAgentRunner` (mock `HttpClient` via `HttpMessageHandler` to verify correct HTTP request format, `api-key` header, and response parsing)
 - [] Step 4.4 — Update existing orchestrator routing tests (if any) to cover stock-specific query routing
 
 ### Phase 5: Documentation & Cleanup
 
-- [] Step 5.1 — Add `STOCK_AGENT_PROJECT_ENDPOINT` and `STOCK_AGENT_NAME` to `appsettings.Development.json` example or environment setup documentation
+- [] Step 5.1 — Add `STOCK_AGENT_RESPONSES_ENDPOINT` and `STOCK_AGENT_API_KEY` to `appsettings.Development.json` example or environment setup documentation
 - [] Step 5.2 — Update architecture diagrams in specs to reflect 4-agent topology
 
 ---
@@ -335,9 +334,25 @@ These are read by `FoundryStockAgentConfig.FromEnvironment()` and injected via t
 
 ### Patterns Discovered
 
-- AgenticGuru PoC provides a proven pattern for calling Azure Foundry agents via `Azure.AI.Projects` SDK (get-or-create agent → Responses API → extract annotated text)
+- AgenticGuru PoC provides a proven pattern for calling Azure Foundry agents via `Azure.AI.Projects` SDK (get-or-create agent → Responses API → extract annotated text) — adapted for direct HTTP calls
 - The `AgentWorkflowBuilder.WithHandoffs()` API makes adding new spokes straightforward — just add to the orchestrator's handoff list
 - Spoke-to-spoke handoffs are supported by the framework — `WithHandoffs(advisorAgent, [stockAgent])` enables direct escalation without routing through the hub
+
+### Research: API Key Authentication
+
+**Finding**: The `Azure.AI.Projects` SDK (`AIProjectClient`) does **NOT** support API key authentication. Its constructors accept only `AuthenticationTokenProvider` (GA) or `TokenCredential` (beta) — no `AzureKeyCredential` variant exists.
+
+**However**, the Azure OpenAI Responses API (which the Foundry agent exposes at `.../protocols/openai/responses`) supports two authentication methods:
+1. **API key**: via `api-key` HTTP header
+2. **Microsoft Entra ID**: via `Authorization: Bearer <token>` header
+
+This is confirmed in the [Azure OpenAI REST API reference](https://learn.microsoft.com/en-us/azure/foundry/openai/reference#authentication) and the [Responses API how-to guide](https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/responses).
+
+**Decision**: Bypass the `Azure.AI.Projects` SDK entirely. Call the Foundry agent's Responses API endpoint directly via `HttpClient` with the `api-key` header. This:
+- Eliminates 3 NuGet dependencies (`Azure.AI.Projects`, `Azure.AI.Projects.OpenAI`, `Azure.Identity`)
+- Simplifies the implementation (single HTTP POST, JSON parsing)
+- Uses the same Responses API semantics as the SDK (same request/response format)
+- API key is stored as environment variable `STOCK_AGENT_API_KEY`
 
 ### Issues Encountered
 
