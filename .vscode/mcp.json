@@ -1,49 +1,40 @@
 {
-    // 💡 Inputs are prompted on first server start, then stored securely by VS Code.
-    "inputs": [
-        {
-            "type": "promptString",
-            "id": "perplexity-key",
-            "description": "Perplexity API Key",
-            "password": true
-        }
-    ],
-    "servers": {
-        "github": {
-            "url": "https://api.githubcopilot.com/mcp",
-            "type": "http"
-        },
-        // https://github.com/ppl-ai/modelcontextprotocol/
-        "perplexity-ask": {
-            "command": "docker",
-            "args": [
-                "run",
-                "-i",
-                "--rm",
-                "-e",
-                "PERPLEXITY_API_KEY",
-                "mcp/perplexity-ask"
-            ],
-            "env": {
-                "PERPLEXITY_API_KEY": "${input:perplexity-key}"
-            }
-        },
-        // https://github.com/upstash/context7
-        "context7": {
-            "command": "docker",
-            "args": [
-                "run",
-                "--rm",
-                "-i",
-                "node:18-alpine",
-                "sh",
-                "-c",
-                "npm install -g @upstash/context7-mcp@1.0.14 && context7-mcp"
-            ]
-        },
-        "FinWise-MCP-Server": {
-            "type": "http",
-            "url": "http://localhost:5000/mcp"
-        }
+  // 💡 Inputs are prompted on first server start, then stored securely by VS Code.
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "perplexity-key",
+      "description": "Perplexity API Key",
+      "password": true
     }
+  ],
+  "servers": {
+    "github": {
+      "url": "https://api.githubcopilot.com/mcp",
+      "type": "http"
+    },
+    // https://github.com/ppl-ai/modelcontextprotocol/
+    "perplexity-ask": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "PERPLEXITY_API_KEY",
+        "mcp/perplexity-ask"
+      ],
+      "env": {
+        "PERPLEXITY_API_KEY": "${input:perplexity-key}"
+      }
+    },
+    "microsoft-learn": {
+      "type": "http",
+      "url": "https://learn.microsoft.com/api/mcp"
+    },
+    "FinWise-MCP-Server": {
+      "type": "http",
+      "url": "http://localhost:5000/mcp"
+    }
+  }
 }

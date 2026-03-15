@@ -70,7 +70,7 @@ public class AgentSessionManager
 
             // Debug: Check if message store is properly restored
             var restoredStore = resumedSession.GetService<InMemoryChatHistoryProvider>();
-            var restoredCount = restoredStore?.Count ?? 0;
+            var restoredCount = restoredStore?.GetMessages(resumedSession).Count ?? 0;
             Log.Debug("Restored AgentSession for {AgentSessionId} with {MessageCount} messages (expected), actual store has {ActualCount} messages, StoreType: {StoreType}",
                 agentSessionId, sessionData.MessageCount, restoredCount, restoredStore?.GetType().Name ?? "null");
             return resumedSession;

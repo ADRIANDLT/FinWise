@@ -39,16 +39,19 @@ public class FinWiseWorkflowService
 
     private readonly IChatClient _chatClient;
     private readonly IUserProfileStore _profileStore;
+    private readonly AIAgent _stockAgent;
     private readonly AgentSessionManager _sessionManager;
 
     public FinWiseWorkflowService(
         IChatClient chatClient,
         IUserProfileStore profileStore,
-        IAgentSessionStore sessionStore)
+        IAgentSessionStore sessionStore,
+        AIAgent stockAgent)
     {
         _chatClient = chatClient ?? throw new ArgumentNullException(nameof(chatClient));
         _profileStore = profileStore ?? throw new ArgumentNullException(nameof(profileStore));
         ArgumentNullException.ThrowIfNull(sessionStore);
+        _stockAgent = stockAgent ?? throw new ArgumentNullException(nameof(stockAgent));
 
         _sessionManager = new AgentSessionManager(sessionStore);
     }
@@ -81,7 +84,7 @@ public class FinWiseWorkflowService
                 var messageStore = currentSession.GetService<InMemoryChatHistoryProvider>();
                 Log.Debug("MessageStore from session: {StoreType}, IsNull: {IsNull}",
                     messageStore?.GetType().Name ?? "null", messageStore == null);
-                List<ChatMessage> messageHistory = messageStore?.ToList() ?? [];
+                List<ChatMessage> messageHistory = messageStore?.GetMessages(currentSession) ?? [];
                 Log.Debug("Loaded {Count} messages from messageStore", messageHistory.Count);
 
                 // Session reset detection:
@@ -106,7 +109,7 @@ public class FinWiseWorkflowService
 
                     messageStore = currentSession.GetService<InMemoryChatHistoryProvider>();
                     messageHistory = [];
-                    messageStore?.Clear();
+                    messageStore?.SetMessages(currentSession, []);
 
                     Log.Information(
                         "Mapped to new session {AgentSessionId} after explicit reset (previous {PreviousAgentSessionId}).",
@@ -165,11 +168,7 @@ public class FinWiseWorkflowService
                 // Update the message store in the session before serialization
                 if (currentSession.GetService<InMemoryChatHistoryProvider>() is InMemoryChatHistoryProvider store)
                 {
-                    store.Clear();
-                    foreach (var msg in messageHistory)
-                    {
-                        store.Add(msg);
-                    }
+                    store.SetMessages(currentSession, messageHistory);
                 }
 
                 await _sessionManager.PersistSessionAsync(agentSessionId, currentSession, orchestratorAgent, persistedUserId, messageHistory.Count);
@@ -213,8 +212,8 @@ public class FinWiseWorkflowService
     }
 
     /// <summary>
-    /// Creates the three-agent handoff workflow.
-    /// All handoffs go through orchestrator — no direct agent-to-agent handoffs for scalability.
+    /// Creates the four-agent handoff workflow.
+    /// Strict hub-and-spoke: all agents route exclusively through the orchestrator.
     /// </summary>
     private (AIAgent OrchestratorAgent, AgentWorkflow Workflow) CreateAgentsAndWorkflow(string agentSessionId)
     {
@@ -232,13 +231,15 @@ public class FinWiseWorkflowService
         AdvisorAgentFactory advisorAgtFactory = new(_chatClient);
         ChatClientAgent advisorAgent = advisorAgtFactory.CreateAgent();
 
-        // Build the handoff workflow
+        var stockAgent = _stockAgent;
+
+        // Build the handoff workflow — strict hub-and-spoke (all agents route through orchestrator)
         AgentWorkflow workflow = AgentWorkflowBuilder.CreateHandoffBuilderWith(orchestratorAgent)
-            .WithHandoffs(orchestratorAgent, [profileAgent, advisorAgent])
-            .WithHandoffs([profileAgent, advisorAgent], orchestratorAgent)
+            .WithHandoffs(orchestratorAgent, [profileAgent, advisorAgent, stockAgent])
+            .WithHandoffs([profileAgent, advisorAgent, stockAgent], orchestratorAgent)
             .Build();
 
-        Log.Information("FinWise workflow initialized with 3 agents for session {AgentSessionId}", agentSessionId);
+        Log.Information("FinWise workflow initialized with 4 agents for session {AgentSessionId}", agentSessionId);
 
         return (orchestratorAgent, workflow);
     }
@@ -250,7 +251,7 @@ public class FinWiseWorkflowService
     private static async Task<(string? Response, List<ChatMessage> Outputs, string? LastExecutor)> ExecuteWorkflowAsync(
         AgentWorkflow workflow, List<ChatMessage> messageHistory)
     {
-        await using StreamingRun run = await InProcessExecution.StreamAsync(workflow, messageHistory);
+        await using StreamingRun run = await InProcessExecution.RunStreamingAsync(workflow, messageHistory);
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
         string? response = null;

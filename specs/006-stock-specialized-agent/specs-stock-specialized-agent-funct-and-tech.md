@@ -119,7 +119,7 @@ Add a **StockSpecializedAgent** as a fourth agent (third spoke) in the existing 
 - **AdvisorAgent → StockSpecializedAgent** (spoke-to-spoke: stock-specific escalation)
 
 **Modified components:**
-- `Agents/` — New `StockSpecializedAgent/` folder (factory + prompt + runner)
+- `Agents/` — New `StockSpecializedAgent/` folder (factory + prompt, 2 files)
 - `Workflow/FinWiseWorkflowService.cs` — Register new agent in handoff topology
 - `Agents/OrchestratorAgent/OrchestratorAgent.prompt.md` — Add routing rules for stock queries
 
@@ -148,14 +148,14 @@ Add a **StockSpecializedAgent** as a fourth agent (third spoke) in the existing 
 ### Technical Requirements
 
 - [ ] TR-1 — No new NuGet packages required — `HttpClient` and `System.Text.Json` are built-in. Remove any unused Azure.AI.Projects references if previously added.
-- [ ] TR-2 — `StockSpecializedAgentFactory` follows existing factory pattern (folder-per-agent, embedded `.prompt.md`, receives dependencies via constructor)
+- [ ] TR-2 — `StockSpecializedAgentFactory` follows the same 2-file layout as AdvisorAgent/OrchestratorAgent (factory `.cs` + `.prompt.md` only — no separate config or runner files). Foundry HTTP call logic and config are embedded in the factory.
 - [ ] TR-3 — Foundry agent invoked via direct HTTP POST to the Responses API endpoint with `api-key` header (not via `AIProjectClient` SDK — that SDK does not support API key auth)
-- [ ] TR-4 — Configuration via environment variables: `STOCK_AGENT_RESPONSES_ENDPOINT` (full Responses API URL) and `STOCK_AGENT_API_KEY` (API key for the Azure AI Services resource)
+- [ ] TR-4 — Configuration via environment variables: `STOCK_AGENT_RESPONSES_ENDPOINT` (full Responses API URL) and `STOCK_AGENT_API_KEY` (API key for the Azure AI Services resource) — read directly in the factory constructor.
 - [ ] TR-5 — Authentication via API key (`api-key` HTTP header), stored in environment variable `STOCK_AGENT_API_KEY`. No `TokenCredential` or `Azure.Identity` dependency.
 - [ ] TR-6 — The agent participates in `AgentWorkflow` handoffs (orchestrator can hand off to it, it can hand off back)
 - [ ] TR-6b — AdvisorAgent has a direct handoff path to StockSpecializedAgent for stock-specific escalation (spoke-to-spoke, in addition to spoke-to-hub)
 - [ ] TR-7 — Zero warnings (TreatWarningsAsErrors enforced)
-- [ ] TR-8 — Unit tests for the new factory and runner
+- [ ] TR-8 — Unit tests for the new factory (config validation, agent creation, tool HTTP call)
 
 ### Implementation Approach: Tool-Based Wrapper
 
@@ -168,17 +168,17 @@ The StockSpecializedAgent is a `ChatClientAgent` (same as existing agents) backe
 - Simpler to implement and test — the Foundry call is isolated in a tool function
 - The trade-off (extra LLM call for the wrapper) is acceptable for v0.2 POC scope
 
-**Component layout:**
+**Component layout (2 files — matches AdvisorAgent / OrchestratorAgent pattern):**
 
 ```
 src/FinWise.MultiAgentWorkflow/
   Agents/
     StockSpecializedAgent/
       StockSpecializedAgent.prompt.md     ← System prompt for the wrapper agent
-      StockSpecializedAgentFactory.cs     ← Factory: creates ChatClientAgent + tool
-      FoundryStockAgentRunner.cs          ← HTTP wrapper: calls Foundry Responses API with api-key
-      FoundryStockAgentConfig.cs          ← Config record (env vars: endpoint + API key)
+      StockSpecializedAgentFactory.cs     ← Factory: creates ChatClientAgent + tool + embeds HTTP runner & config
 ```
+
+The Foundry HTTP call logic and configuration (env var reading, `HttpClient` POST, response parsing) are embedded directly in the factory class — no separate runner or config files. This mirrors how `UserProfileAgentFactory` embeds its profile tools and store access.
 
 **Data flow:**
 
@@ -250,7 +250,7 @@ Environment variables (following AgenticGuru pattern):
 | `STOCK_AGENT_RESPONSES_ENDPOINT` | Full Responses API URL for the Foundry agent | `https://ai-foundry-cesardl.services.ai.azure.com/api/projects/DemoProject/applications/stock-specialized-investment-agent/protocols/openai/responses?api-version=2025-11-15-preview` |
 | `STOCK_AGENT_API_KEY` | API key for the Azure AI Services resource | (from Azure Portal → AI Services resource → Keys and Endpoint) |
 
-These are read by `FoundryStockAgentConfig.FromEnvironment()` and injected via the composition root (`Program.cs`).
+These are read directly by the `StockSpecializedAgentFactory` constructor and used to configure the embedded HTTP call logic.
 
 ### Alternatives Considered
 
@@ -282,9 +282,10 @@ These are read by `FoundryStockAgentConfig.FromEnvironment()` and injected via t
 
 ### Implementation Guidance
 
-- **HTTP call pattern**: Mirror the `AIToolsResearchAgentRunner` semantics from the AgenticGuru PoC, but replace `AIProjectClient` SDK calls with direct `HttpClient` POST to the Responses API endpoint. Send JSON body with `input` field and parse the response's `output` array for text content and annotations.
-- **Config pattern**: Mirror `AIToolsResearchAgentConfig.FromEnvironment()` for environment variable resolution — reads `STOCK_AGENT_RESPONSES_ENDPOINT` and `STOCK_AGENT_API_KEY`
-- **Agent factory pattern**: Mirror `AdvisorAgentFactory` / `UserProfileAgentFactory` for agent creation
+- **2-file layout**: Match the `AdvisorAgentFactory` / `OrchestratorAgentFactory` pattern exactly — one factory `.cs` file + one `.prompt.md` file per agent folder. No separate config or runner classes.
+- **HTTP call pattern**: The factory embeds the Foundry HTTP call directly (as a tool method, like `UserProfileAgentFactory` embeds profile tools). Mirror the `AIToolsResearchAgentRunner` semantics from the AgenticGuru PoC, but replace `AIProjectClient` SDK calls with direct `HttpClient` POST to the Responses API endpoint. Send JSON body with `input` field and parse the response's `output` array for text content and annotations.
+- **Config pattern**: Environment variables (`STOCK_AGENT_RESPONSES_ENDPOINT`, `STOCK_AGENT_API_KEY`) are read directly in the factory constructor — no separate config class.
+- **Agent factory pattern**: Mirror `AdvisorAgentFactory` for agent creation, `UserProfileAgentFactory` for tool registration.
 - **Credentials**: API key from environment variable — passed via `api-key` HTTP header on every request. Store securely; never log or commit the key.
 - **Agent endpoint**: The Responses API URL is pre-configured (env var), no runtime agent discovery needed
 
@@ -296,29 +297,27 @@ These are read by `FoundryStockAgentConfig.FromEnvironment()` and injected via t
 >
 > Agent updates these steps as work progresses. Never proceed to next step without approval.
 
-### Phase 1: Infrastructure & Configuration
+### Phase 1: Verify Prerequisites
 
 - [] Step 1.1 — No new NuGet packages required. Verify `FinWise.MultiAgentWorkflow.csproj` already references `System.Text.Json` (or it's implicitly available via the framework). No changes to `Directory.Packages.props`.
-- [] Step 1.2 — Create `FoundryStockAgentConfig.cs` in `Agents/StockSpecializedAgent/` — a sealed record that reads `STOCK_AGENT_RESPONSES_ENDPOINT` and `STOCK_AGENT_API_KEY` from environment variables. Follows the `AIToolsResearchAgentConfig` pattern (static `FromEnvironment()` factory method with validation).
-- [] Step 1.3 — Create `FoundryStockAgentRunner.cs` in `Agents/StockSpecializedAgent/` — a class that uses `HttpClient` to POST to the Foundry agent's Responses API endpoint with `api-key` header. Sends JSON body with `{ "input": [{ "role": "user", "content": "<query>" }] }` and parses the response's `output` array for text content. Includes annotation/citation text extraction. Factory method `CreateFromConfig(config, httpClient)`, a `RunAsync(query)` method that returns the text response.
 
-### Phase 2: Agent Factory & Prompt
+### Phase 2: Agent Factory & Prompt (2 files)
 
 - [] Step 2.1 — Create `StockSpecializedAgent.prompt.md` in `Agents/StockSpecializedAgent/` — system prompt for the wrapper agent. Instructs the agent to always use the `query_stock_documents` tool for any stock-related query and to relay the tool's response (including citations) to the user. The prompt should also instruct it to hand off back to the orchestrator when done.
-- [] Step 2.2 — Create `StockSpecializedAgentFactory.cs` in `Agents/StockSpecializedAgent/` — follows existing factory pattern. Receives `IChatClient` and `FoundryStockAgentConfig` via constructor (plus `IHttpClientFactory` or a pre-configured `HttpClient`). Exposes `Name` ("stock_specialized_agent") and `Description`. The `CreateAgent()` method builds a `ChatClientAgent` with the embedded prompt and registers a `query_stock_documents` tool. The tool internally creates a `FoundryStockAgentRunner` and calls `RunAsync(query)`.
+- [] Step 2.2 — Create `StockSpecializedAgentFactory.cs` in `Agents/StockSpecializedAgent/` — follows the same 2-file layout as AdvisorAgent/OrchestratorAgent. Receives `IChatClient` and `HttpClient` via constructor. Reads `STOCK_AGENT_RESPONSES_ENDPOINT` and `STOCK_AGENT_API_KEY` from environment variables (config logic embedded in the factory, no separate config class). Exposes `Name` ("stock_specialized_agent") and `Description`. The `CreateAgent()` method builds a `ChatClientAgent` with the embedded prompt and registers a `query_stock_documents` tool. The tool method (embedded in the factory, like `UserProfileAgentFactory`'s profile tools) uses `HttpClient` to POST to the Foundry Responses API with `api-key` header, parses the response, and returns the text with citations.
 
 ### Phase 3: Workflow Integration
 
 - [] Step 3.1 — Update `OrchestratorAgent.prompt.md` to add routing rules for stock-specific queries. Stock queries route to `stock_specialized_agent` only when PROFILE_READY exists. The routing remains: (1) no PROFILE_READY → profile agent, (2) stock-specific → stock agent, (3) profile intent → profile agent, (4) advice intent → advisor agent.
 - [] Step 3.2 — Update `AdvisorAgent.prompt.md` to add a handoff rule: when the user asks stock-specific data questions (company financials, annual report figures), hand off to `stock_specialized_agent` instead of trying to answer from general knowledge.
-- [] Step 3.3 — Update `FinWiseWorkflowService.cs` to create the `StockSpecializedAgentFactory` and register the stock agent in the handoff topology. The constructor receives `FoundryStockAgentConfig` and `HttpClient` (or `IHttpClientFactory`) as additional dependencies. In `CreateAgentsAndWorkflow()`: (a) add the stock agent to the orchestrator's handoff list, (b) register the stock agent → orchestrator handoff, (c) register the advisor agent → stock agent handoff (spoke-to-spoke).
-- [] Step 3.4 — Update `Program.cs` (composition root) to create `FoundryStockAgentConfig.FromEnvironment()`, create/configure `HttpClient`, and pass both to `FinWiseWorkflowService`.
+- [] Step 3.3 — Update `FinWiseWorkflowService.cs` to create the `StockSpecializedAgentFactory` and register the stock agent in the handoff topology. The constructor receives `HttpClient` as an additional dependency. In `CreateAgentsAndWorkflow()`: (a) add the stock agent to the orchestrator's handoff list, (b) register the stock agent → orchestrator handoff, (c) register the advisor agent → stock agent handoff (spoke-to-spoke).
+- [] Step 3.4 — Update `Program.cs` (composition root) to create/configure `HttpClient` and pass it to `FinWiseWorkflowService`.
 
 ### Phase 4: Testing
 
-- [] Step 4.1 — Write unit tests for `FoundryStockAgentConfig.FromEnvironment()` (validates required env vars, default values)
+- [] Step 4.1 — Write unit tests for `StockSpecializedAgentFactory` config validation (env vars required, missing throws)
 - [] Step 4.2 — Write unit tests for `StockSpecializedAgentFactory.CreateAgent()` (verifies agent name, description, tool registration)
-- [] Step 4.3 — Write unit tests for `FoundryStockAgentRunner` (mock `HttpClient` via `HttpMessageHandler` to verify correct HTTP request format, `api-key` header, and response parsing)
+- [] Step 4.3 — Write unit tests for the `query_stock_documents` tool method (mock `HttpClient` via `HttpMessageHandler` to verify correct HTTP request format, `api-key` header, and response parsing)
 - [] Step 4.4 — Update existing orchestrator routing tests (if any) to cover stock-specific query routing
 
 ### Phase 5: Documentation & Cleanup
