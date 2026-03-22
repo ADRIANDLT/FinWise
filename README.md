@@ -7,14 +7,14 @@ FinWise is an [MCP](https://modelcontextprotocol.io/) server with four AI agents
 - **OrchestratorAgent** — silent router that delegates to the right specialist
 - **ProfileAgent** — collects/manages user profiles (`get_profile`, `set_profile`, `delete_profile`)
 - **AdvisorAgent** — provides personalized investment advice once the profile is ready
-- **StockSpecializedAgent** — delegates to an Azure AI Foundry Agent for real-time stock research and analysis
+- **StockSpecializedAgent** — delegates to an Azure AI Foundry Agent for document-grounded stock research and analysis (based on uploaded annual reports and filings, not live market data)
 
 ## Quick Start
 
 ### Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (only if using CosmosDB storage)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (required for Redis session store and CosmosDB emulator, both enabled by default — disable via `Redis__Enabled=false` and `CosmosDb__Enabled=false` to skip)
 - Azure OpenAI credentials (endpoint, deployment name, API key)
 - Azure AI Foundry project with a deployed stock agent (for the StockSpecializedAgent)
 - An Azure AD App Registration (service principal) with access to the Foundry project
