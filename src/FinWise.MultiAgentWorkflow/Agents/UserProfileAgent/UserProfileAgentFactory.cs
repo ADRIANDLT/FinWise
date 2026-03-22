@@ -210,6 +210,13 @@ public class UserProfileAgentFactory
             AIFunctionFactory.Create(SetProfile, name: "set_profile"),
             AIFunctionFactory.Create(DeleteProfile, name: "delete_profile")
         };
-        return new ChatClientAgent(_chatClient, Prompt, Name, Description, actionTools);
+        // Id must be stable — SDK session store keys by {agentId}:{conversationId}
+        return new ChatClientAgent(_chatClient, new ChatClientAgentOptions
+        {
+            Id = Name,
+            Name = Name,
+            Description = Description,
+            ChatOptions = new() { Instructions = Prompt, Tools = [.. actionTools] }
+        });
     }
 }

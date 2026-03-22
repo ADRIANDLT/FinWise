@@ -102,9 +102,9 @@ User: "give me financial advice"
 → Orchestrator routes to profile_agent
 → "Please provide your email address."
 
-User: "cesardl@outlook.com"  
+User: "adrian.delatorre@outlook.com"  
 → Orchestrator checks: profile_agent active? YES → routes to profile_agent
-→ get_profile("cesardl@outlook.com") → null
+→ get_profile("adrian.delatorre@outlook.com") → null
 → "What is your risk tolerance?..."
 
 User: "Aggressive"

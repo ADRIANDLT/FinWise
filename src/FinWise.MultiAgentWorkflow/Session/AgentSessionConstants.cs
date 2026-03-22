@@ -15,6 +15,17 @@ internal static class AgentSessionConstants
     internal const string ProfileReadyMarker = "PROFILE_READY:";
 
     /// <summary>
+    /// Checks whether the conversation history contains a PROFILE_READY marker,
+    /// indicating the user's profile is complete and advisor/stock agents can be accessed.
+    /// </summary>
+    internal static bool IsProfileReady(List<ChatMessage> history)
+    {
+        return history.Any(m =>
+            m.Role == ChatRole.Assistant &&
+            m.Text?.Contains(ProfileReadyMarker, StringComparison.OrdinalIgnoreCase) == true);
+    }
+
+    /// <summary>
     /// Pattern to extract email from the PROFILE_READY marker in conversation history.
     /// Matches "email=user@example.com" in "PROFILE_READY: email=user@example.com ...".
     /// </summary>

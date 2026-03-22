@@ -27,8 +27,8 @@ FinWise.McpServer (ASP.NET Core MCP Server)
 FinWise.MultiAgentWorkflow (Class Library)
   ├── Workflow/FinWiseWorkflowService (core orchestration)
   ├── Agents/ (OrchestratorAgent, ProfileAgent, AdvisorAgent)
-  ├── Session/ (AgentSessionManager, AgentSessionResetEvaluator, ConversationRunContext)
-  └── Infrastructure/ (AgentSessionStore, UserProfileStore)
+  ├── Session/ (AgentSessionManager, SessionResetFlag, ConversationRunContext)
+  └── Infrastructure/ (UserProfileStore)
 ```
 
 **Key patterns:**
@@ -46,7 +46,7 @@ FinWise.MultiAgentWorkflow (Class Library)
 │   ├── Workflow/                                  # Multi-agent handoff orchestration
 │   ├── Session/                                   # Conversation state management
 │   ├── DomainModel/                                  # Domain model (UserProfile)
-│   └── Infrastructure/                               # AgentSessionStore + UserProfileStore
+│   └── Infrastructure/                               # UserProfileStore
 ├── tests/FinWise.MultiAgentWorkflow.UnitTests/   # Unit tests (xUnit + FluentAssertions + Moq)
 ├── tests/FinWise.McpServer.IntegrationTests/     # Integration / E2E tests
 ├── specs/                                         # Feature specs and research
@@ -68,28 +68,11 @@ FinWise.MultiAgentWorkflow (Class Library)
 
 ## Design Rules
 
-### Namespace Convention
-Folder path = namespace. `Infrastructure/UserProfileStore/InMemory/` → `FinWise.Orchestrator.Infrastructure.UserProfileStore.InMemory`.
-Sub-folder names must NOT match class names (avoids C# namespace/type collision).
-
-### Infrastructure Organization
-`Infrastructure/` folder for internal services. Each service gets its own sub-folder with:
-- Interface at the service root (e.g., `Infrastructure/UserProfileStore/IUserProfileStore.cs`)
-- Implementation sub-folders by provider (e.g., `InMemory/`, `CosmosDb/`)
-
-### Profile Store Access
-`IUserProfileStore` is **only accessed through `UserProfileAgentFactory`**. `Program.cs` creates the store and injects it — it never calls store methods directly.
-
-### Session Serialization
-```csharp
-// Save
-JsonElement json = await agent.SerializeSessionAsync(session);
-// Restore
-AgentSession session = await agent.DeserializeSessionAsync(json);
-```
-
-### Manual DI
-No DI container for agents. `Program.cs` is the composition root — creates stores, managers, and injects manually.
+- **Namespace = folder path** — sub-folder names must NOT match class names (C# collision)
+- **Manual DI** — no container; `Program.cs` is the composition root
+- **Hub-and-spoke handoffs** — all agents route through orchestrator, no direct agent-to-agent
+- **Packages** — centralized in `Directory.Packages.props`
+- **Free-form profile fields** — no validation/enum constraints; advisor interprets
 
 ## Build & Test
 
