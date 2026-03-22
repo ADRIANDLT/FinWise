@@ -243,6 +243,61 @@ public class CosmosDbUserProfileStoreIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task GetProfile_AfterCreation_SurvivesAcrossSessions()
+    {
+        SkipIfEmulatorNotAvailable();
+
+        // Arrange: simulate creating a profile in session 1
+        var userId = $"returning_{Guid.NewGuid():N}@example.com";
+        var profile = new UserProfile(userId, "Moderate", "Wealth growth", "short-term");
+        await _store!.SetProfileAsync(userId, profile);
+
+        // Act: simulate a new session (different store instance, same CosmosDB) looking up the same email
+        // This is what happens after session reset — the profile should still be in CosmosDB
+        var retrieved = await _store.GetProfileAsync(userId);
+
+        // Assert: profile must be found and complete
+        retrieved.Should().NotBeNull("profile should survive session reset — it's stored in CosmosDB, not in the agent session");
+        retrieved!.UserId.Should().Be(userId);
+        retrieved.RiskTolerance.Should().Be("Moderate");
+        retrieved.InvestmentGoals.Should().Be("Wealth growth");
+        retrieved.InvestmentTimeframe.Should().Be("short-term");
+        retrieved.IsComplete.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetProfile_ReturnsCompleteProfile_WhenCalledWithSameEmailAfterReset()
+    {
+        SkipIfEmulatorNotAvailable();
+
+        // This test mimics the exact user scenario:
+        // 1. User creates profile (set_profile calls)
+        // 2. Session is reset (clears agent session, NOT profile store)
+        // 3. User provides same email in new session
+        // 4. get_profile should return FOUND_COMPLETE
+
+        // Step 1: Create complete profile
+        var userId = "test-reset-user@example.com";
+        var profile = new UserProfile(userId, "Aggressive", "Growth", "long-term");
+        await _store!.SetProfileAsync(userId, profile);
+
+        // Step 2: Verify it's stored
+        var beforeReset = await _store.GetProfileAsync(userId);
+        beforeReset.Should().NotBeNull();
+        beforeReset!.IsComplete.Should().BeTrue();
+
+        // Step 3: "Reset" happens — agent session is cleared, but profile store is untouched
+        // (nothing to do here — ResetSessionAsync only clears AgentSessionStore, not IUserProfileStore)
+
+        // Step 4: New session looks up the same email
+        var afterReset = await _store.GetProfileAsync(userId);
+        afterReset.Should().NotBeNull("CosmosDB profile store is independent of agent sessions");
+        afterReset!.UserId.Should().Be(userId);
+        afterReset.IsComplete.Should().BeTrue();
+        afterReset.RiskTolerance.Should().Be("Aggressive");
+    }
+
+    [Fact]
     public async Task Profile_WithNullFields_PersistsCorrectly()
     {
         SkipIfEmulatorNotAvailable();

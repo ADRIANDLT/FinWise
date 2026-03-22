@@ -1,8 +1,11 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Azure.AI.Projects;
+using Azure.Identity;
 using FinWise.McpServer;
-using FinWise.MultiAgentWorkflow.Infrastructure.AgentSessionStore;
-using FinWise.MultiAgentWorkflow.Infrastructure.AgentSessionStore.InMemory;
+using FinWise.MultiAgentWorkflow.Agents.StockSpecializedAgent;
+using Microsoft.Agents.AI.Hosting;
+using FinWise.MultiAgentWorkflow.Infrastructure.AgentSessionStores.Redis;
 using FinWise.MultiAgentWorkflow.Infrastructure.UserProfileStore;
 using FinWise.MultiAgentWorkflow.Infrastructure.UserProfileStore.CosmosDb;
 using FinWise.MultiAgentWorkflow.Infrastructure.UserProfileStore.InMemory;
@@ -15,6 +18,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Serilog;
+using StackExchange.Redis;
 
 // MCP uses stdio for JSON-RPC communication. Redirect Console.Out to stderr
 // to prevent any diagnostic output from polluting the MCP protocol stream.
@@ -76,8 +80,42 @@ try
         profileStore = new InMemoryUserProfileStore();
     }
 
-    IAgentSessionStore sessionStore = new InMemoryAgentSessionStore();
-    var workflowService = new FinWiseWorkflowService(chatClient, profileStore, sessionStore);
+    AgentSessionStore sessionStore;
+    var redisOptions = new RedisOptions();
+    configuration.GetSection(RedisOptions.SectionName).Bind(redisOptions);
+
+    if (redisOptions.Enabled)
+    {
+        Log.Information("Using Redis session store (Host: {RedisHost}, TTL: {Ttl} min)",
+            redisOptions.ConnectionString.Split(',')[0], redisOptions.SessionTtlMinutes);
+
+        var redis = await ConnectionMultiplexer.ConnectAsync(redisOptions.ConnectionString);
+        sessionStore = new RedisAgentSessionStore(redis, TimeSpan.FromMinutes(redisOptions.SessionTtlMinutes), "orchestrator_agent");
+    }
+    else
+    {
+        Log.Information("Using in-memory session store");
+        sessionStore = new InMemoryAgentSessionStore();
+    }
+
+    // Resolve the stock specialized agent from Azure AI Foundry
+    var stockAgentEndpoint = Environment.GetEnvironmentVariable("STOCK_AGENT_PROJECT_ENDPOINT")
+        ?? throw new InvalidOperationException("Environment variable 'STOCK_AGENT_PROJECT_ENDPOINT' is required.");
+    var stockAgentName = Environment.GetEnvironmentVariable("STOCK_AGENT_NAME")
+        ?? throw new InvalidOperationException("Environment variable 'STOCK_AGENT_NAME' is required.");
+    var stockAgentTenantId = Environment.GetEnvironmentVariable("FINWISE_AZURE_TENANT_ID")
+        ?? throw new InvalidOperationException("Environment variable 'FINWISE_AZURE_TENANT_ID' is required.");
+    var stockAgentClientId = Environment.GetEnvironmentVariable("FINWISE_AZURE_CLIENT_ID")
+        ?? throw new InvalidOperationException("Environment variable 'FINWISE_AZURE_CLIENT_ID' is required.");
+    var stockAgentClientSecret = Environment.GetEnvironmentVariable("FINWISE_AZURE_CLIENT_SECRET")
+        ?? throw new InvalidOperationException("Environment variable 'FINWISE_AZURE_CLIENT_SECRET' is required.");
+
+    var stockAgentFactory = new StockSpecializedAgentFactory(
+        new AIProjectClient(new Uri(stockAgentEndpoint), new ClientSecretCredential(stockAgentTenantId, stockAgentClientId, stockAgentClientSecret)),
+        stockAgentName);
+    var stockAgent = await stockAgentFactory.CreateAgentAsync();
+
+    var workflowService = new FinWiseWorkflowService(chatClient, profileStore, sessionStore, stockAgent);
 
     // Build the web application
     var builder = WebApplication.CreateBuilder(args);

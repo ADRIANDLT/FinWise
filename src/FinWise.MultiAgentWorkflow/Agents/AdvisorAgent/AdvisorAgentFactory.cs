@@ -31,6 +31,13 @@ public class AdvisorAgentFactory
 
     public ChatClientAgent CreateAgent()
     {
-        return new ChatClientAgent(_chatClient, Prompt, Name, Description);
+        // Id must be stable — SDK session store keys by {agentId}:{conversationId}
+        return new ChatClientAgent(_chatClient, new ChatClientAgentOptions
+        {
+            Id = Name,
+            Name = Name,
+            Description = Description,
+            ChatOptions = new() { Instructions = Prompt }
+        });
     }
 }

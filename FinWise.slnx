@@ -7,5 +7,7 @@
     <Project Path="tests/FinWise.CosmosDb.IntegrationTests/FinWise.CosmosDb.IntegrationTests.csproj" />
     <Project Path="tests/FinWise.McpServer.IntegrationTests/FinWise.McpServer.IntegrationTests.csproj" />
     <Project Path="tests/FinWise.MultiAgentWorkflow.UnitTests/FinWise.MultiAgentWorkflow.UnitTests.csproj" />
+    <Project Path="tests/FinWise.Redis.IntegrationTests/FinWise.Redis.IntegrationTests.csproj" />
+    <Project Path="tests/FinWise.StockAgent.IntegrationTests/FinWise.StockAgent.IntegrationTests.csproj" />
   </Folder>
 </Solution>

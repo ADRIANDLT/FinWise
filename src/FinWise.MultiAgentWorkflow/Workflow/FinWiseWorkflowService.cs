@@ -1,11 +1,10 @@
-using System.Text.RegularExpressions;
 using FinWise.MultiAgentWorkflow.Agents.AdvisorAgent;
 using FinWise.MultiAgentWorkflow.Agents.OrchestratorAgent;
 using FinWise.MultiAgentWorkflow.Agents.UserProfileAgent;
-using FinWise.MultiAgentWorkflow.Infrastructure.AgentSessionStore;
 using FinWise.MultiAgentWorkflow.Infrastructure.UserProfileStore;
 using FinWise.MultiAgentWorkflow.Session;
 using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Hosting;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using Serilog;
@@ -28,35 +27,32 @@ namespace FinWise.MultiAgentWorkflow.Workflow;
 /// </summary>
 public class FinWiseWorkflowService
 {
-    /// <summary>
-    /// Detects standalone email addresses in user queries for augmentation.
-    /// When a user sends only "user@example.com", we augment it to
-    /// "My email address is: user@example.com" so the LLM understands the intent.
-    /// </summary>
-    private static readonly Regex StandaloneEmailPattern = new(
-        @"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
-        RegexOptions.Compiled);
-
     private readonly IChatClient _chatClient;
     private readonly IUserProfileStore _profileStore;
+    private readonly AIAgent _stockAgent;
     private readonly AgentSessionManager _sessionManager;
 
     public FinWiseWorkflowService(
         IChatClient chatClient,
         IUserProfileStore profileStore,
-        IAgentSessionStore sessionStore)
+        AgentSessionStore sessionStore,
+        AIAgent stockAgent)
     {
-        _chatClient = chatClient ?? throw new ArgumentNullException(nameof(chatClient));
-        _profileStore = profileStore ?? throw new ArgumentNullException(nameof(profileStore));
+        ArgumentNullException.ThrowIfNull(chatClient);
+        ArgumentNullException.ThrowIfNull(profileStore);
         ArgumentNullException.ThrowIfNull(sessionStore);
+        ArgumentNullException.ThrowIfNull(stockAgent);
 
+        _chatClient = chatClient;
+        _profileStore = profileStore;
+        _stockAgent = stockAgent;
         _sessionManager = new AgentSessionManager(sessionStore);
     }
 
     /// <summary>
     /// Processes a user message through the multi-agent workflow.
-    /// Handles session restore, reset detection, email augmentation, workflow execution,
-    /// response validation, and session persistence.
+    /// Handles session restore, workflow execution, response validation,
+    /// session persistence, and post-workflow reset detection.
     /// </summary>
     /// <param name="agentSessionId">
     /// The agent session identifier (caller manages the mapping).
@@ -70,72 +66,50 @@ public class FinWiseWorkflowService
 
         using (LogContext.PushProperty("RequestId", requestId))
         {
+            // Capture the caller's original session ID before any mutation (reset may generate a new one).
+            // Catch blocks use this because the caller only knows the original ID, and a failed reset
+            // may leave the new ID unpersisted.
+            var originalAgentSessionId = agentSessionId;
+
             try
             {
-                var (orchestratorAgent, workflow) = CreateAgentsAndWorkflow(agentSessionId);
+                // First create agents with profile-only access (safe default).
+                // We'll rebuild with full access after checking message history.
+                var (orchestratorAgent, workflow) = CreateAgentsAndWorkflow(agentSessionId, isProfileReady: false);
 
                 // Restore or create AgentSession using Microsoft Agent Framework patterns
-                AgentSession currentSession = await _sessionManager.GetOrCreateSessionAsync(orchestratorAgent, agentSessionId);
+                // Messages are stored independently from AgentSession because the SDK's
+                // InMemoryChatHistoryProvider service is not reliably restored during deserialization
+                var (currentSession, messageHistory) = await _sessionManager.GetOrCreateSessionAsync(orchestratorAgent, agentSessionId);
+                Log.Debug("Loaded {Count} messages from session store", messageHistory.Count);
 
-                // Get messages from session's message store (per framework pattern)
-                var messageStore = currentSession.GetService<InMemoryChatHistoryProvider>();
-                Log.Debug("MessageStore from session: {StoreType}, IsNull: {IsNull}",
-                    messageStore?.GetType().Name ?? "null", messageStore == null);
-                List<ChatMessage> messageHistory = messageStore?.ToList() ?? [];
-                Log.Debug("Loaded {Count} messages from messageStore", messageHistory.Count);
-
-                // Session reset detection:
-                // User can explicitly request reset with phrases like "re-identify", "my email is...", etc.
-                bool wasReset = false;
-                if (messageHistory.Count > 0 && AgentSessionResetEvaluator.ShouldResetSession(messageHistory, query))
+                // Determine if profile is ready — gates access to advisor/stock agents
+                bool isProfileReady = AgentSessionConstants.IsProfileReady(messageHistory);
+                if (isProfileReady)
                 {
-                    var previousAgentSessionId = agentSessionId;
-                    Log.Information(
-                        "Explicit reset requested via query '{Query}'. Previous session {PreviousAgentSessionId} had {MessageCount} messages.",
-                        query,
-                        previousAgentSessionId,
-                        messageHistory.Count);
-
-                    await _sessionManager.ClearSessionAsync(previousAgentSessionId);
-
-                    agentSessionId = Guid.NewGuid().ToString();
-                    wasReset = true;
-
-                    (orchestratorAgent, workflow) = CreateAgentsAndWorkflow(agentSessionId);
-                    currentSession = await _sessionManager.GetOrCreateSessionAsync(orchestratorAgent, agentSessionId);
-
-                    messageStore = currentSession.GetService<InMemoryChatHistoryProvider>();
-                    messageHistory = [];
-                    messageStore?.Clear();
-
-                    Log.Information(
-                        "Mapped to new session {AgentSessionId} after explicit reset (previous {PreviousAgentSessionId}).",
-                        agentSessionId,
-                        previousAgentSessionId);
+                    // Rebuild workflow with full agent access (advisor + stock agents)
+                    (orchestratorAgent, workflow) = CreateAgentsAndWorkflow(agentSessionId, isProfileReady: true);
+                    // Re-restore session for the new orchestrator agent instance
+                    (currentSession, messageHistory) = await _sessionManager.GetOrCreateSessionAsync(orchestratorAgent, agentSessionId);
                 }
 
                 Log.Information("======================== REQUEST START ========================");
                 Log.Information("ProcessMessage invoked, AgentSessionId: {AgentSessionId}, Query: {Query}", agentSessionId, query);
                 Log.Information("Retrieved {MessageCount} messages for session {AgentSessionId}", messageHistory.Count, agentSessionId);
 
-                // Extract email from query if present and augment message for better LLM understanding
-                var emailMatch = StandaloneEmailPattern.Match(query);
-                string userMessage = query;
-                if (emailMatch.Success && query.Trim() == emailMatch.Value)
-                {
-                    // User provided ONLY an email address - augment it so LLM understands context
-                    userMessage = $"My email address is: {emailMatch.Value}";
-                    Log.Information("Detected standalone email in query. Augmented to: {AugmentedMessage}", userMessage);
-                }
-
                 // Add user query
-                messageHistory.Add(new ChatMessage(ChatRole.User, userMessage));
+                messageHistory.Add(new ChatMessage(ChatRole.User, query));
 
                 using var sessionScope = AgentSessionRunContext.Push(
                     new AgentSessionRunSnapshot(agentSessionId, messageHistory));
 
+                // Initialize reset token before workflow execution — tools mutate this shared reference
+                var resetToken = SessionResetFlag.Initialize();
+
                 // Execute workflow - per Microsoft Agent Framework workflow patterns
-                var (response, workflowOutputs, lastRespondingAgent) = await ExecuteWorkflowAsync(workflow, messageHistory);
+                // Timeout prevents infinite handoff loops (e.g., orchestrator ↔ advisor bouncing)
+                using var workflowCts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+                var (response, workflowOutputs, lastRespondingAgent) = await ExecuteWorkflowAsync(workflow, messageHistory, workflowCts.Token);
                 AppendUniqueMessages(messageHistory, workflowOutputs);
 
                 // If we got no valid response (only orchestrator talked), that's an error
@@ -147,35 +121,60 @@ public class FinWiseWorkflowService
 
                 // Validate: The orchestrator should NEVER produce user-facing text — only tool calls.
                 // Any text from the orchestrator is a failed handoff (leaked JSON payload, markdown fence, etc.).
+                // Exception: After calling request_session_reset, the orchestrator responds directly —
+                // we log this but don't replace it (the reset block below overrides the response anyway).
                 if (!string.IsNullOrEmpty(response))
                 {
                     var lastOutput = workflowOutputs.LastOrDefault(m => m.Role == ChatRole.Assistant && !string.IsNullOrWhiteSpace(m.Text));
                     if (lastOutput?.AuthorName == "orchestrator_agent" || lastRespondingAgent == "orchestrator_agent")
                     {
-                        Log.Warning("Orchestrator emitted text instead of executing handoff. Response: {Response}",
-                            response.Length > 200 ? response[..200] + "..." : response);
-                        response = "I'm processing your request. Please try again.";
+                        if (resetToken.IsRequested)
+                        {
+                            Log.Information("Orchestrator emitted reset confirmation text (expected)");
+                        }
+                        else
+                        {
+                            Log.Warning("Orchestrator emitted text instead of executing handoff. Response: {Response}",
+                                response.Length > 200 ? response[..200] + "..." : response);
+                            response = "I'm processing your request. Please try again.";
+                        }
                     }
                 }
 
-                // Persist session using Microsoft Agent Framework patterns
-                string persistedUserId = AgentSessionConstants.ExtractUserIdFromMessageHistory(messageHistory)
-                    ?? $"anonymous+{Guid.NewGuid():N}";
-
-                // Update the message store in the session before serialization
-                if (currentSession.GetService<InMemoryChatHistoryProvider>() is InMemoryChatHistoryProvider store)
+                // Check if the orchestrator's reset tool was called during workflow execution.
+                // The token is a mutable reference type — mutations by tools inside the workflow
+                // are visible here because AsyncLocal copies references, not objects.
+                // If ClearSessionAsync throws after the flag is detected, the catch block returns
+                // originalAgentSessionId — the next request resumes on the old session (graceful degradation).
+                bool wasReset = resetToken.IsRequested;
+                if (wasReset && !isProfileReady)
                 {
-                    store.Clear();
-                    foreach (var msg in messageHistory)
-                    {
-                        store.Add(msg);
-                    }
+                    Log.Warning("Ignoring spurious session reset — PROFILE_READY not found in conversation history. {AgentSessionId}", agentSessionId);
+                    wasReset = false;
                 }
 
-                await _sessionManager.PersistSessionAsync(agentSessionId, currentSession, orchestratorAgent, persistedUserId, messageHistory.Count);
+                SessionResetFlag.Clear();
+                if (wasReset)
+                {
+                    // Override any workflow output — the reset is the only thing that matters.
+                    // This makes the reset LLM-proof: regardless of what the orchestrator emitted,
+                    // the user always sees a consistent reset confirmation.
+                    response = "Your session has been reset. Please provide your email address to start a new conversation.";
+                    await _sessionManager.ClearSessionAsync(agentSessionId);
+                    agentSessionId = Guid.NewGuid().ToString();
+                    Log.Information("Session reset via orchestrator tool. New session {AgentSessionId} (previous {PreviousAgentSessionId})",
+                        agentSessionId, originalAgentSessionId);
+                }
+                else
+                {
+                    // Only persist if not resetting — reset clears the session
+                    await _sessionManager.PersistSessionAsync(agentSessionId, currentSession, orchestratorAgent, messageHistory);
 
-                Log.Information("Persisted AgentSession with {MessageCount} messages for session {AgentSessionId} (userId: {UserId})",
-                    messageHistory.Count, agentSessionId, persistedUserId);
+                    string loggedUserId = AgentSessionConstants.ExtractUserIdFromMessageHistory(messageHistory)
+                        ?? $"anonymous+{agentSessionId}";
+                    Log.Information("Persisted AgentSession with {MessageCount} messages for session {AgentSessionId} (userId: {UserId})",
+                        messageHistory.Count, agentSessionId, loggedUserId);
+                }
 
                 Log.Information("Request completed successfully");
                 return new WorkflowResponse(
@@ -183,12 +182,20 @@ public class FinWiseWorkflowService
                     agentSessionId,
                     wasReset);
             }
+            catch (OperationCanceledException)
+            {
+                Log.Warning("Workflow execution timed out for session {AgentSessionId}", originalAgentSessionId);
+                return new WorkflowResponse(
+                    "The request took too long to process. Please try again or provide your email address to get started.",
+                    originalAgentSessionId,
+                    WasReset: false);
+            }
             catch (Exception ex)
             {
                 Log.Error(ex, "Request failed");
                 return new WorkflowResponse(
                     "I apologize, but I encountered an error processing your request. Please try again.",
-                    agentSessionId,
+                    originalAgentSessionId,
                     WasReset: false);
             }
         }
@@ -213,10 +220,10 @@ public class FinWiseWorkflowService
     }
 
     /// <summary>
-    /// Creates the three-agent handoff workflow.
-    /// All handoffs go through orchestrator — no direct agent-to-agent handoffs for scalability.
+    /// Creates the four-agent handoff workflow.
+    /// Strict hub-and-spoke: all agents route exclusively through the orchestrator.
     /// </summary>
-    private (AIAgent OrchestratorAgent, AgentWorkflow Workflow) CreateAgentsAndWorkflow(string agentSessionId)
+    private (AIAgent OrchestratorAgent, AgentWorkflow Workflow) CreateAgentsAndWorkflow(string agentSessionId, bool isProfileReady = false)
     {
         Log.Information("Creating agents for AgentSessionId: {AgentSessionId}", agentSessionId);
 
@@ -232,13 +239,22 @@ public class FinWiseWorkflowService
         AdvisorAgentFactory advisorAgtFactory = new(_chatClient);
         ChatClientAgent advisorAgent = advisorAgtFactory.CreateAgent();
 
-        // Build the handoff workflow
+        var stockAgent = _stockAgent;
+
+        // Build the handoff workflow — strict hub-and-spoke (all agents route through orchestrator)
+        // Gate advisor/stock agents behind profile completion to prevent handoff loops.
+        // Without PROFILE_READY, the orchestrator can ONLY route to profile_agent.
+        AIAgent[] availableAgents = isProfileReady
+            ? [profileAgent, advisorAgent, stockAgent]
+            : [profileAgent];
+
         AgentWorkflow workflow = AgentWorkflowBuilder.CreateHandoffBuilderWith(orchestratorAgent)
-            .WithHandoffs(orchestratorAgent, [profileAgent, advisorAgent])
-            .WithHandoffs([profileAgent, advisorAgent], orchestratorAgent)
+            .WithHandoffs(orchestratorAgent, availableAgents)
+            .WithHandoffs(availableAgents, orchestratorAgent)
             .Build();
 
-        Log.Information("FinWise workflow initialized with 3 agents for session {AgentSessionId}", agentSessionId);
+        Log.Information("FinWise workflow initialized with {AgentCount} agents for session {AgentSessionId} (ProfileReady: {IsProfileReady})",
+            availableAgents.Length + 1, agentSessionId, isProfileReady);
 
         return (orchestratorAgent, workflow);
     }
@@ -247,23 +263,41 @@ public class FinWiseWorkflowService
     /// Executes the agent workflow by streaming events and collecting the response.
     /// Uses InProcessExecution.StreamAsync per Microsoft Agent Framework workflow patterns.
     /// </summary>
+    /// <summary>
+    /// Maximum number of agent invocations per workflow run.
+    /// Prevents infinite handoff loops (e.g., orchestrator ↔ advisor bouncing when no profile exists).
+    /// </summary>
+    private const int MaxAgentInvocations = 25;
+
     private static async Task<(string? Response, List<ChatMessage> Outputs, string? LastExecutor)> ExecuteWorkflowAsync(
-        AgentWorkflow workflow, List<ChatMessage> messageHistory)
+                                                                                                        AgentWorkflow workflow,
+                                                                                                        List<ChatMessage> messageHistory,
+                                                                                                        CancellationToken cancellationToken = default)
     {
-        await using StreamingRun run = await InProcessExecution.StreamAsync(workflow, messageHistory);
+        await using StreamingRun run = await InProcessExecution.RunStreamingAsync(workflow, messageHistory, cancellationToken: cancellationToken);
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
         string? response = null;
         string? lastRespondingAgent = null;
         List<ChatMessage> outputs = [];
+        int agentInvocationCount = 0;
 
-        await foreach (WorkflowEvent evt in run.WatchStreamAsync())
+        await foreach (WorkflowEvent evt in run.WatchStreamAsync().WithCancellation(cancellationToken))
         {
             switch (evt)
             {
                 case ExecutorInvokedEvent invoked:
-                    Log.Information("Agent invoked: {AgentId}", invoked.ExecutorId);
+                    agentInvocationCount++;
+                    Log.Information("Agent invoked: {AgentId} (invocation {Count}/{Max})",
+                        invoked.ExecutorId, agentInvocationCount, MaxAgentInvocations);
                     lastRespondingAgent = invoked.ExecutorId;
+                    if (agentInvocationCount >= MaxAgentInvocations)
+                    {
+                        Log.Warning("Max agent invocations ({Max}) reached — possible handoff loop. Terminating workflow.",
+                            MaxAgentInvocations);
+                        return (response ?? "I'm having trouble routing your request. Please provide your email address to get started.",
+                            outputs, lastRespondingAgent);
+                    }
                     break;
                 case WorkflowErrorEvent errorEvt:
                     var exception = errorEvt.Data as Exception;
