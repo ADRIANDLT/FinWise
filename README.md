@@ -7,14 +7,14 @@ FinWise is an [MCP](https://modelcontextprotocol.io/) server with four AI agents
 - **OrchestratorAgent** — silent router that delegates to the right specialist
 - **ProfileAgent** — collects/manages user profiles (`get_profile`, `set_profile`, `delete_profile`)
 - **AdvisorAgent** — provides personalized investment advice once the profile is ready
-- **StockSpecializedAgent** — delegates to an Azure AI Foundry Agent for real-time stock research and analysis
+- **StockSpecializedAgent** — delegates to an Azure AI Foundry Agent for document-grounded stock research and analysis (grounded in uploaded annual reports)
 
 ## Quick Start
 
 ### Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (only if using CosmosDB storage)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (required for Redis session store and CosmosDB; both are enabled by default — disable either in `appsettings.json` to skip Docker)
 - Azure OpenAI credentials (endpoint, deployment name, API key)
 - Azure AI Foundry project with a deployed stock agent (for the StockSpecializedAgent)
 - An Azure AD App Registration (service principal) with access to the Foundry project
@@ -60,21 +60,26 @@ Used by the stock agent today, but serves as the application's identity for acce
 | `CosmosDb__Key` | Emulator key | CosmosDB account key |
 | `CosmosDb__DatabaseName` | `FinWise` | Database name |
 | `CosmosDb__ContainerName` | `UserProfiles` | Container name |
+| `Redis__Enabled` | `true` | Toggle Redis vs in-memory session store |
+| `Redis__ConnectionString` | `localhost:6379` | Redis connection string |
+| `Redis__SessionTtlMinutes` | `1440` | Session TTL in minutes (default: 24 h) |
 
 ### Running Locally
 
 1. **Set required environment variables** (see tables above).
 
-2. **Start the CosmosDB emulator** (optional — for persistent profile storage):
+2. **Start Docker services** (optional — for persistent profile and session storage):
    ```powershell
    docker compose up -d
    ```
-   > CosmosDB is **enabled by default** in `appsettings.json`. To skip Docker and use in-memory storage instead, set `CosmosDb__Enabled` to `false`. See [docs/COSMOSDB-SETUP.md](docs/COSMOSDB-SETUP.md) for details.
+   > Both CosmosDB and Redis are **enabled by default** in `appsettings.json`. To skip Docker entirely, set `CosmosDb__Enabled` to `false` and `Redis__Enabled` to `false`. See [docs/COSMOSDB-SETUP.md](docs/COSMOSDB-SETUP.md) and [docs/REDIS-SETUP.md](docs/REDIS-SETUP.md) for details.
 
-   | Mode | Configuration | Use Case |
-   |------|---------------|----------|
-   | **In-Memory** | `CosmosDb.Enabled: false` | Quick testing, no persistence |
-   | **CosmosDB** | `CosmosDb.Enabled: true` (default) | Persistent storage across restarts |
+   | Service | Mode | Configuration | Use Case |
+   |---------|------|---------------|----------|
+   | **Profile Store** | In-Memory | `CosmosDb.Enabled: false` | Quick testing, no persistence |
+   | **Profile Store** | CosmosDB | `CosmosDb.Enabled: true` (default) | Persistent storage across restarts |
+   | **Session Store** | In-Memory | `Redis.Enabled: false` | Quick testing, no persistence |
+   | **Session Store** | Redis | `Redis.Enabled: true` (default) | Persistent sessions across restarts |
 
 3. **Build and run the orchestrator**:
    ```powershell
@@ -119,4 +124,5 @@ Serilog writes structured logs to both **console** and a **rolling file**:
 ## Documentation
 
 - [CosmosDB Setup Guide](docs/COSMOSDB-SETUP.md) — Local development with CosmosDB emulator
+- [Redis Setup Guide](docs/REDIS-SETUP.md) — Local development with Redis session store
 - [Feature Specifications](specs/) — Detailed feature requirements and designs
