@@ -1,11 +1,2 @@
 {
-  "permissions": {
-    "allow": [
-      "Bash(tree:*)",
-      "Bash(cat:*)",
-      "Bash(find:*)",
-      "Bash(grep:*)",
-      "Bash(wc:*)"
-    ]
-  }
 }
