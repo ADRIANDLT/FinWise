@@ -1,6 +1,7 @@
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Hosting;
 using Microsoft.Extensions.AI;
+using FinWise.MultiAgentWorkflow.Infrastructure.AgentSessionStores;
 using Serilog;
 
 namespace FinWise.MultiAgentWorkflow.Session;
@@ -88,14 +89,20 @@ public class AgentSessionManager
     }
 
     /// <summary>
-    /// Clears an agent session. For in-memory store this is a no-op — orphaned keys
-    /// are harmless because both call sites generate a new agentSessionId immediately
-    /// after clearing. For Redis (v0.3.2+), this will perform an explicit key delete.
+    /// Clears an agent session. For InMemoryAgentSessionStore this is a no-op — orphaned keys
+    /// are harmless. For RedisAgentSessionStore, performs an explicit key delete with TTL as safety net.
     /// </summary>
-    public Task ClearSessionAsync(string agentSessionId)
+    public async Task ClearSessionAsync(string agentSessionId)
     {
-        Log.Debug("ClearSessionAsync called for {AgentSessionId} (no-op for in-memory store)", agentSessionId);
-        return Task.CompletedTask;
+        if (_sessionStore is IClearableSessionStore clearable)
+        {
+            await clearable.ClearSessionAsync(agentSessionId);
+            Log.Debug("Cleared session for {AgentSessionId}", agentSessionId);
+        }
+        else
+        {
+            Log.Debug("ClearSessionAsync called for {AgentSessionId} (no-op for in-memory store)", agentSessionId);
+        }
     }
 }
 

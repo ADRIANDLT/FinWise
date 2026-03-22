@@ -91,6 +91,8 @@ public abstract class AgentSessionStore
 
 **Health check**: `redis-cli ping` returns `PONG`.
 
+> **⚠️ Authentication**: The local Docker Redis container runs without authentication (`--requirepass` is not set). This is intentional for local development convenience. For production deployments (e.g., Azure Cache for Redis), authentication must be enabled — Azure Cache for Redis enforces access keys or Microsoft Entra ID authentication by default.
+
 ### 2.4 Comparison with CosmosDB Pattern in Codebase
 
 The existing `CosmosDbUserProfileStore` provides the infrastructure pattern to replicate:

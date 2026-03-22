@@ -22,6 +22,7 @@
     <PackageReference Include="Microsoft.Azure.Cosmos" />
     <PackageReference Include="Microsoft.Extensions.Options" />
     <PackageReference Include="Serilog" />
+    <PackageReference Include="StackExchange.Redis" />
     <PackageReference Include="Newtonsoft.Json" />
   </ItemGroup>
 </Project>

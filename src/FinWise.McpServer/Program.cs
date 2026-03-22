@@ -5,6 +5,7 @@ using Azure.Identity;
 using FinWise.McpServer;
 using FinWise.MultiAgentWorkflow.Agents.StockSpecializedAgent;
 using Microsoft.Agents.AI.Hosting;
+using FinWise.MultiAgentWorkflow.Infrastructure.AgentSessionStores.Redis;
 using FinWise.MultiAgentWorkflow.Infrastructure.UserProfileStore;
 using FinWise.MultiAgentWorkflow.Infrastructure.UserProfileStore.CosmosDb;
 using FinWise.MultiAgentWorkflow.Infrastructure.UserProfileStore.InMemory;
@@ -17,6 +18,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Serilog;
+using StackExchange.Redis;
 
 // MCP uses stdio for JSON-RPC communication. Redirect Console.Out to stderr
 // to prevent any diagnostic output from polluting the MCP protocol stream.
@@ -78,7 +80,23 @@ try
         profileStore = new InMemoryUserProfileStore();
     }
 
-    AgentSessionStore sessionStore = new InMemoryAgentSessionStore();
+    AgentSessionStore sessionStore;
+    var redisOptions = new RedisOptions();
+    configuration.GetSection(RedisOptions.SectionName).Bind(redisOptions);
+
+    if (redisOptions.Enabled)
+    {
+        Log.Information("Using Redis session store (Host: {RedisHost}, TTL: {Ttl} min)",
+            redisOptions.ConnectionString.Split(',')[0], redisOptions.SessionTtlMinutes);
+
+        var redis = await ConnectionMultiplexer.ConnectAsync(redisOptions.ConnectionString);
+        sessionStore = new RedisAgentSessionStore(redis, TimeSpan.FromMinutes(redisOptions.SessionTtlMinutes), "orchestrator_agent");
+    }
+    else
+    {
+        Log.Information("Using in-memory session store");
+        sessionStore = new InMemoryAgentSessionStore();
+    }
 
     // Resolve the stock specialized agent from Azure AI Foundry
     var stockAgentEndpoint = Environment.GetEnvironmentVariable("STOCK_AGENT_PROJECT_ENDPOINT")

@@ -1,4 +1,5 @@
 using FluentAssertions;
+using FinWise.MultiAgentWorkflow.Infrastructure.AgentSessionStores;
 using FinWise.MultiAgentWorkflow.Session;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Hosting;
@@ -112,6 +113,19 @@ public class AgentSessionManagerTests
         var act = () => _manager.ClearSessionAsync("any-session-id");
 
         await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task ClearSessionAsync_WithClearableStore_DelegatesToStore()
+    {
+        var mockStore = new Mock<AgentSessionStore>();
+        var mockClearable = mockStore.As<IClearableSessionStore>();
+        mockClearable.Setup(c => c.ClearSessionAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+
+        var manager = new AgentSessionManager(mockStore.Object);
+        await manager.ClearSessionAsync("session-to-clear");
+
+        mockClearable.Verify(c => c.ClearSessionAsync("session-to-clear"), Times.Once);
     }
 
     [Fact]
