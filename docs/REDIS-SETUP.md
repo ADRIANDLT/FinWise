@@ -73,7 +73,7 @@ INFO memory         # Memory usage stats
 docker compose up -d redis
 
 # Stop Redis
-docker compose down redis
+docker compose stop redis
 
 # View logs
 docker compose logs -f redis
