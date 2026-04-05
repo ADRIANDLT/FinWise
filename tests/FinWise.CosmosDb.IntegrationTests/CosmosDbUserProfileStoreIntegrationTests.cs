@@ -1,8 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using FinWise.MultiAgentWorkflow.DomainModel;
-using FinWise.MultiAgentWorkflow.Infrastructure.UserProfileStore;
-using FinWise.MultiAgentWorkflow.Infrastructure.UserProfileStore.CosmosDb;
+using FinWise.MultiAgentWorkflow.Infrastructure.UserProfileStores;
+using FinWise.MultiAgentWorkflow.Infrastructure.UserProfileStores.CosmosDb;
 using FluentAssertions;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Options;
@@ -51,19 +51,22 @@ public class CosmosDbUserProfileStoreIntegrationTests : IAsyncLifetime
             AllowInsecureTls = true
         };
 
-        var clientOptions = new CosmosClientOptions
-        {
-            HttpClientFactory = () => new HttpClient(new HttpClientHandler
-            {
-                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-            }),
-            ConnectionMode = ConnectionMode.Gateway
-        };
+        var clientOptions = new CosmosClientOptions();
         clientOptions.UseSystemTextJsonSerializerWithOptions = new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
         };
+
+        if (options.AllowInsecureTls)
+        {
+            clientOptions.HttpClientFactory = () => new HttpClient(new HttpClientHandler
+            {
+                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+            });
+            clientOptions.ConnectionMode = ConnectionMode.Gateway;
+            clientOptions.LimitToEndpoint = true;
+        }
 
         _client = new CosmosClient(EmulatorEndpoint, EmulatorKey, clientOptions);
         _store = new CosmosDbUserProfileStore(_client, Options.Create(options));

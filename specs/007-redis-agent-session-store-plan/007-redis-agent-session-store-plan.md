@@ -739,7 +739,7 @@ src/FinWise.MultiAgentWorkflow/
   │   │   └── Redis/
   │   │       ├── RedisOptions.cs
   │   │       └── RedisAgentSessionStore.cs
-  │   └── UserProfileStore/
+  │   └── UserProfileStores/
   │       ├── IUserProfileStore.cs
   │       ├── CosmosDb/
   │       │   ├── CosmosDbOptions.cs

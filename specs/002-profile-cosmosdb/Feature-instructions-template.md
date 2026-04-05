@@ -27,7 +27,7 @@ TO DO: Feature Name
 - **ASK ME ONLY ONE QUESTION AT A TIME!** Do not proceed until I have answered.
 
 - Before starting any new major step or milestone, fully reread these
-  instructions, `.github/copilot-instructions.md` and ALL files with changes
+  instructions, `AGENTS.md` and ALL files with changes
   that are not in git yet. I don't care if your responses are slow - I always
   want the quality result.
 

@@ -18,11 +18,12 @@
     <PackageReference Include="Microsoft.Agents.AI.Workflows" />
     <PackageReference Include="Azure.AI.Projects" />
     <PackageReference Include="Azure.AI.Projects.OpenAI" />
-    <PackageReference Include="Microsoft.Agents.AI.AzureAI" />
+    <PackageReference Include="Microsoft.Agents.AI.Foundry" />
     <PackageReference Include="Microsoft.Azure.Cosmos" />
     <PackageReference Include="Microsoft.Extensions.Options" />
     <PackageReference Include="Serilog" />
     <PackageReference Include="StackExchange.Redis" />
+    <!-- Required by Cosmos DB SDK at runtime -->
     <PackageReference Include="Newtonsoft.Json" />
   </ItemGroup>
 </Project>

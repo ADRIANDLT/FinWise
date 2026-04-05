@@ -31,8 +31,8 @@ public class RedisAgentSessionStoreTests
     }
 
     [Theory]
-    [InlineData("orchestrator_agent", "abc123", "orchestrator_agent:abc123")]
-    [InlineData("agent_a", "session-1", "agent_a:session-1")]
+    [InlineData("orchestrator_agent", "abc123", "agentsession:orchestrator_agent:abc123")]
+    [InlineData("agent_a", "session-1", "agentsession:agent_a:session-1")]
     public void GetKey_FormatsAsAgentIdColonConversationId(string agentId, string conversationId, string expected)
     {
         RedisAgentSessionStore.GetKey(agentId, conversationId).Should().Be(expected);
@@ -50,7 +50,7 @@ public class RedisAgentSessionStoreTests
         var invocation = _dbMock.Invocations
             .SingleOrDefault(i => i.Method.Name == "StringSetAsync");
         invocation.Should().NotBeNull("StringSetAsync should have been called");
-        invocation!.Arguments[0].ToString().Should().Be("test_agent:conv-1");
+        invocation!.Arguments[0].ToString().Should().Be("agentsession:test_agent:conv-1");
 
         // Verify TTL was passed (StackExchange.Redis encodes TimeSpan as "EX {seconds}")
         invocation.Arguments[2].ToString().Should().Be($"EX {(int)_ttl.TotalSeconds}");
@@ -59,7 +59,7 @@ public class RedisAgentSessionStoreTests
     [Fact]
     public async Task GetSessionAsync_CreatesNewSession_WhenKeyMissing()
     {
-        _dbMock.Setup(db => db.StringGetAsync((RedisKey)"test_agent:conv-new", It.IsAny<CommandFlags>()))
+        _dbMock.Setup(db => db.StringGetAsync((RedisKey)"agentsession:test_agent:conv-new", It.IsAny<CommandFlags>()))
             .ReturnsAsync(RedisValue.Null);
 
         var result = await _store.GetSessionAsync(_agent, "conv-new");
@@ -74,7 +74,7 @@ public class RedisAgentSessionStoreTests
         var serialized = await _agent.SerializeSessionAsync(originalSession);
         var json = serialized.GetRawText();
 
-        _dbMock.Setup(db => db.StringGetAsync((RedisKey)"test_agent:conv-existing", It.IsAny<CommandFlags>()))
+        _dbMock.Setup(db => db.StringGetAsync((RedisKey)"agentsession:test_agent:conv-existing", It.IsAny<CommandFlags>()))
             .ReturnsAsync(new RedisValue(json));
 
         var result = await _store.GetSessionAsync(_agent, "conv-existing");
@@ -88,7 +88,7 @@ public class RedisAgentSessionStoreTests
         await _store.ClearSessionAsync("conv-delete");
 
         _dbMock.Verify(db => db.KeyDeleteAsync(
-            (RedisKey)"test_agent:conv-delete",
+            (RedisKey)"agentsession:test_agent:conv-delete",
             It.IsAny<CommandFlags>()), Times.Once);
     }
 

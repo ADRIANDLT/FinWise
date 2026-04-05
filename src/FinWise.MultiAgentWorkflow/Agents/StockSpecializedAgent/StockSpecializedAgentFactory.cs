@@ -1,6 +1,8 @@
 ﻿using System.ClientModel;
 using Azure.AI.Projects;
+using Azure.AI.Projects.Agents;
 using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Foundry;
 using Serilog;
 
 namespace FinWise.MultiAgentWorkflow.Agents.StockSpecializedAgent;
@@ -21,17 +23,18 @@ public class StockSpecializedAgentFactory
     {
         Log.Information("Resolving Foundry agent by name: {AgentName}", _agentName);
 
-        AIAgent agent;
+        ProjectsAgentRecord agentRecord;
         try
         {
-            agent = await _projectClient.GetAIAgentAsync(_agentName);
+            agentRecord = await _projectClient.AgentAdministrationClient.GetAgentAsync(_agentName);
         }
-        catch (ClientResultException ex)
+        catch (ClientResultException ex) when (ex.Status == 404)
         {
             throw new InvalidOperationException(
                 $"No Foundry agent found with name '{_agentName}'", ex);
         }
 
+        FoundryAgent agent = _projectClient.AsAIAgent(agentRecord);
         Log.Information("Resolved Foundry agent '{AgentName}'", agent.Name);
         return agent;
     }

@@ -1,114 +1,107 @@
 # FinWise — Agent Instructions
 
-Multi-agent financial advisor exposing workflows via MCP (Model Context Protocol).
-
----
-
-## 🔧 Feature Toggles
+## Feature Toggles
 
 | Feature | Status | When ON | When OFF |
 |---------|--------|---------|----------|
-| **Memory Bank** | ✅ ON | Load `.memory-bank/` files at session start | Skip `.memory-bank/` entirely. Fresh start each session. |
+| **Memory Bank** | ✅ ON | Load `.memory-bank/` files at session start | Skip `.memory-bank/` entirely |
 
----
+## Architecture
 
-## Architecture Overview
+MCP Client → **FinWise.McpServer** (thin server host) → **FinWise.MultiAgentWorkflow** (core library).
+Hub-and-spoke: all agents route through Orchestrator. No direct agent-to-agent calls.
+`PROFILE_READY:` marker from ProfileAgent gates advisor/stock access. MCP-Session-Id header = agentSessionId.
 
-```
-MCP Client (VS Code / Claude Desktop)
-  │  HTTP + MCP-Session-Id header
-  ▼
-FinWise.McpServer (ASP.NET Core MCP Server)
-  ├── Tools/FinWiseTools.cs (attribute-based, 2 tools)
-  ├── McpSessionMapping (session → conversation mapping)
-  └── Program.cs (composition root)
-        │
-        ▼
-FinWise.MultiAgentWorkflow (Class Library)
-  ├── Workflow/FinWiseWorkflowService (core orchestration)
-  ├── Agents/ (OrchestratorAgent, ProfileAgent, AdvisorAgent)
-  ├── Session/ (AgentSessionManager, SessionResetFlag, ConversationRunContext)
-  └── Infrastructure/ (UserProfileStore)
-```
+### Agents
 
-**Key patterns:**
-- Hub-and-spoke handoffs — all agents route through orchestrator, no direct agent-to-agent
-- Stateless agents — `AIAgent` instances hold no state; all state lives in `AgentSession`
-- `PROFILE_READY:` marker — signal from ProfileAgent that profile is complete; gates advisor access
-- Session detection — `MCP-Session-Id` HTTP header distinguishes clients
+| Agent | Role |
+|-------|------|
+| Orchestrator | Silent router — handoffs only, never outputs text to user |
+| ProfileAgent | Collects user profile (email, risk, goals, timeframe) |
+| AdvisorAgent | Investment recommendations (gated by `PROFILE_READY`) |
+| StockAgent | Market analysis via Azure AI Foundry (optional, gated by `PROFILE_READY`) |
 
 ## Repository Structure
 
-```
-├── src/FinWise.McpServer/                        # Thin MCP server host (transport + composition root)
-├── src/FinWise.MultiAgentWorkflow/               # Class library: agents, workflow, session, services
-│   ├── Agents/                                   # Agent factories (Orchestrator, Profile, Advisor)
-│   ├── Workflow/                                  # Multi-agent handoff orchestration
-│   ├── Session/                                   # Conversation state management
-│   ├── DomainModel/                                  # Domain model (UserProfile)
-│   └── Infrastructure/                               # UserProfileStore
-├── tests/FinWise.MultiAgentWorkflow.UnitTests/   # Unit tests (xUnit + FluentAssertions + Moq)
-├── tests/FinWise.McpServer.IntegrationTests/     # Integration / E2E tests
-├── specs/                                         # Feature specs and research
-└── samples/                                       # Reference implementations
-```
+| Folder | Purpose |
+|--------|---------|
+| `src/FinWise.McpServer/` | Thin MCP server host (transport + composition root) |
+| `src/FinWise.MultiAgentWorkflow/` | Core library: agents, workflow, session, storage |
+| `tests/` | Unit, integration, E2E, and container tests |
+| `specs/` | Feature specs and research |
+| `docs/` | Setup guides and operational docs |
 
-## Technology Stack
-
-| Category | Technology |
-|----------|------------|
-| Runtime | .NET 10, C# latest |
-| AI | Microsoft.Extensions.AI + Azure OpenAI |
-| Agent Framework | Microsoft.Agents.AI (NuGet preview) |
-| Protocol | MCP via ModelContextProtocol.AspNetCore |
-| Logging | Serilog (structured, `LogContext.PushProperty`) |
-| Storage | In-memory (CosmosDB for profiles, more planned) |
-| Testing | xUnit, FluentAssertions, Moq |
-| Packages | Centralized in `Directory.Packages.props` |
-
-## Design Rules
-
-- **Namespace = folder path** — sub-folder names must NOT match class names (C# collision)
-- **Manual DI** — no container; `Program.cs` is the composition root
-- **Hub-and-spoke handoffs** — all agents route through orchestrator, no direct agent-to-agent
-- **Packages** — centralized in `Directory.Packages.props`
-- **Free-form profile fields** — no validation/enum constraints; advisor interprets
-
-## Build & Test
+## Build, Test & Deploy
 
 ```powershell
+# Build
 dotnet build FinWise.slnx
+
+# Unit tests (no infrastructure needed)
 dotnet test tests/FinWise.MultiAgentWorkflow.UnitTests/
-dotnet test tests/FinWise.McpServer.IntegrationTests/
+dotnet test tests/FinWise.McpServer.UnitTests/
+```
+
+### Option A — Full Docker stack
+
+> **Requires Docker Desktop 4.22+ / Docker Compose v2.20+** — the `include:` directive in `docker-compose.yml` is not supported by older versions.
+
+```powershell
+docker compose up -d
+```
+
+Starts CosmosDB emulator + Redis + FinWise MCP Server (port 5000).
+
+### Option B — Local .NET dev + Docker infrastructure
+
+```powershell
+# Start only CosmosDB + Redis
+docker compose -f docker-compose.infra.yml up -d
+
+# Run MCP server locally (requires infrastructure above)
 dotnet run --project src/FinWise.McpServer/ --urls http://localhost:5000
 ```
 
-## Development Rules
+### Integration tests (require infrastructure from Option A or B + Azure env vars)
 
-- **Minimal diffs** — only change what's necessary
-- **TreatWarningsAsErrors** — zero warnings allowed
-- **Conventional Commits** format
-- **Never commit secrets** — use env vars for Azure OpenAI credentials
-- **TDD** for new features (Red → Green → Refactor)
-- **Free-form profile fields** — no validation/enum constraints; advisor interprets
+```powershell
+dotnet test tests/FinWise.McpServer.IntegrationTests/    # Server running + Azure OpenAI env vars
+dotnet test tests/FinWise.CosmosDb.IntegrationTests/     # CosmosDB emulator
+dotnet test tests/FinWise.Redis.IntegrationTests/        # Redis
+dotnet test tests/FinWise.StockAgent.IntegrationTests/   # Azure AI Foundry env vars
+```
+
+### Container tests (require Option A — full Docker stack)
+
+```powershell
+docker compose up -d
+dotnet test tests/FinWise.McpServer.ContainerTests/
+```
+
+## Design Rules
+
+### MUST
+
+- Hub-and-spoke handoffs — all agents route through Orchestrator
+- Free-form profile fields — no validation/enum constraints
+- Conventional Commits format
+- Use env vars for secrets and credentials (Azure OpenAI, etc.)
+
+### MUST NOT
+
+- Never commit secrets or credentials
+- Never bypass hub-and-spoke (no direct agent-to-agent calls)
 
 ## Project-Specific Instructions
 
-| Project | Instructions |
-|---------|--------------|
-| MultiAgentWorkflow | `src/FinWise.MultiAgentWorkflow/AGENTS.md` |
-| McpServer | `src/FinWise.McpServer/AGENTS.md` |
+Each project has its own `AGENTS.md` with technology-specific rules:
+
+- [`src/FinWise.McpServer/AGENTS.md`](src/FinWise.McpServer/AGENTS.md)
+- [`src/FinWise.MultiAgentWorkflow/AGENTS.md`](src/FinWise.MultiAgentWorkflow/AGENTS.md)
 
 ## Memory Bank
 
 > Skip if Memory Bank = ❌ OFF above.
 
 Read all `.memory-bank/` files at session start. Templates in [`.memory-bank/AGENTS.md`](.memory-bank/AGENTS.md).
-
-| File | Purpose |
-|------|---------|
-| `activeContext.md` | Current task, recent changes, next steps |
-| `learnings.md` | Technical patterns, code structure, decisions |
-| `userDirectives.md` | User preferences and constraints |
-
-**Workflow**: Load at session start → follow documented patterns → update after each completed step.
+Update after each completed step.

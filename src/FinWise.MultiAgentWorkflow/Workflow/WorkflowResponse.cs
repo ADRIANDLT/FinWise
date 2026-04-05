@@ -7,7 +7,7 @@ namespace FinWise.MultiAgentWorkflow.Workflow;
 /// <param name="AgentSessionId">
 /// The active agent session identifier after processing.
 /// Called <c>conversationId</c> in the SDK's <c>AgentSessionStore</c> — same concept.
-/// May differ from the input ID if a reset occurred (see <paramref name="WasReset"/>).
+/// Always equals the input ID — resets clear data under the same key.
 /// </param>
 /// <param name="WasReset">Whether the session was reset during this request.</param>
 public record WorkflowResponse(string Response, string AgentSessionId, bool WasReset);

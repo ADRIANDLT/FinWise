@@ -1,6 +1,6 @@
 using FinWise.MultiAgentWorkflow.DomainModel;
-using FinWise.MultiAgentWorkflow.Infrastructure.UserProfileStore;
-using FinWise.MultiAgentWorkflow.Infrastructure.UserProfileStore.CosmosDb;
+using FinWise.MultiAgentWorkflow.Infrastructure.UserProfileStores;
+using FinWise.MultiAgentWorkflow.Infrastructure.UserProfileStores.CosmosDb;
 using FluentAssertions;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Options;

@@ -1,78 +1,57 @@
-# Docker Compose for FinWise infrastructure (dev)
-# - Azure CosmosDB Emulator (Linux) for user profiles
-# - Redis for agent session persistence
+# Docker Compose for FinWise — Full Stack
+#
+# Full stack:           docker compose up -d
+# Infrastructure only:  docker compose -f docker-compose.infra.yml up -d
+#
+# Includes infrastructure (CosmosDB + Redis) and adds FinWise MCP Server.
+#
+# IMPORTANT: "name: finwise" must match docker-compose.infra.yml so both files
+# share the same Docker volumes. Without this, the full-stack compose uses the
+# directory name as project prefix, creating separate volumes and losing data
+# written via the infra-only compose (or vice versa).
+
+name: finwise
+
+include:
+  - docker-compose.infra.yml
 
 services:
-  cosmosdb-emulator:
-    image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:latest
-    container_name: cosmosdb-emulator
-    hostname: cosmosdb-emulator
+  finwise-mcp-server:
+    build:
+      context: .
+      dockerfile: src/FinWise.McpServer/Dockerfile
+    image: finwise-mcp-server:0.3.1
+    container_name: finwise-mcp-server
     ports:
-      - "8081:8081" # NoSQL API endpoint
-      - "10250:10250" # Compute emulator
-      - "10251:10251" # Compute emulator
-      - "10252:10252" # Compute emulator
-      - "10253:10253" # Compute emulator
-      - "10254:10254" # Compute emulator
+      - "5000:5000"
     environment:
-      - AZURE_COSMOS_EMULATOR_PARTITION_COUNT=10
-      - AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE=true
-      - AZURE_COSMOS_EMULATOR_IP_ADDRESS_OVERRIDE=127.0.0.1
-    volumes:
-      - cosmosdb-data:/tmp/cosmos/appdata
-    mem_limit: 3g
-    cpu_count: 2
+      - ASPNETCORE_ENVIRONMENT=Docker
+      # Azure OpenAI (required — from .env file)
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
+      - AZURE_OPENAI_DEPLOYMENT_NAME=${AZURE_OPENAI_DEPLOYMENT_NAME}
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
+      # Stock Agent (optional — from .env file)
+      - STOCK_AGENT_PROJECT_ENDPOINT=${STOCK_AGENT_PROJECT_ENDPOINT:-}
+      - STOCK_AGENT_NAME=${STOCK_AGENT_NAME:-}
+      - FINWISE_AZURE_TENANT_ID=${FINWISE_AZURE_TENANT_ID:-}
+      - FINWISE_AZURE_CLIENT_ID=${FINWISE_AZURE_CLIENT_ID:-}
+      - FINWISE_AZURE_CLIENT_SECRET=${FINWISE_AZURE_CLIENT_SECRET:-}
+    depends_on:
+      finwise-redis:
+        condition: service_healthy
+      finwise-cosmosdb-emulator:
+        condition: service_healthy
     healthcheck:
-      test: [ "CMD-SHELL", "curl -f -k https://localhost:8081/_explorer/emulator.pem || exit 1" ]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-
-  redis:
-    image: redis:7.4-alpine
-    container_name: finwise-redis
-    ports:
-      - "6379:6379"
-    command: redis-server --save 60 1 --loglevel warning
-    volumes:
-      - redis-data:/data
-    mem_limit: 256m
-    healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test: [ "CMD-SHELL", "curl -sf -o /dev/null http://localhost:5000/health || exit 1" ]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 5s
-
-volumes:
-  cosmosdb-data:
-    driver: local
-  redis-data:
-    driver: local
+      retries: 10
+      start_period: 15s
+    mem_limit: 512m
 
 # Usage:
-#   Start all:   docker compose up -d
-#   Start Redis only: docker compose up -d redis
-#   Stop:    docker compose down
-#   Logs:    docker compose logs -f redis
-#   Status:  docker compose ps
-#
-# Redis Connection Details:
-#   Host: localhost
-#   Port: 6379
-#   Connection String: localhost:6379
-#
-# CosmosDB Connection Details:
-#   Endpoint: https://localhost:8081/
-#   Key: C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==
-#
-# Data Explorer: https://localhost:8081/_explorer/index.html
-#
-# Redis CLI:
-#   docker exec -it finwise-redis redis-cli
-#   > KEYS *              (list all keys)
-#   > GET key             (get value)
-#   > TTL key             (check TTL in seconds)
-#   > DBSIZE              (count keys)
-#   > FLUSHDB             (clear all keys)
+#   Full stack:           docker compose up -d
+#   Infrastructure only:  docker compose -f docker-compose.infra.yml up -d
+#   Stop:                 docker compose down
+#   Logs:                 docker compose logs -f
+#   Status:               docker compose ps

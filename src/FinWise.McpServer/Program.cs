@@ -1,39 +1,30 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using Azure.AI.Projects;
-using Azure.Identity;
-using FinWise.McpServer;
-using FinWise.MultiAgentWorkflow.Agents.StockSpecializedAgent;
-using Microsoft.Agents.AI.Hosting;
-using FinWise.MultiAgentWorkflow.Infrastructure.AgentSessionStores.Redis;
-using FinWise.MultiAgentWorkflow.Infrastructure.UserProfileStore;
-using FinWise.MultiAgentWorkflow.Infrastructure.UserProfileStore.CosmosDb;
-using FinWise.MultiAgentWorkflow.Infrastructure.UserProfileStore.InMemory;
+using FinWise.McpServer.Infrastructure.AgentSessionStorage;
+using FinWise.McpServer.Infrastructure.AzureAIFoundry;
+using FinWise.McpServer.Infrastructure.AzureOpenAI;
+using FinWise.McpServer.Infrastructure.Logging;
+using FinWise.McpServer.Infrastructure.McpSession.Redis;
+using FinWise.McpServer.Infrastructure.UserProfileStorage;
 using FinWise.MultiAgentWorkflow.Workflow;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Options;
 using Serilog;
-using StackExchange.Redis;
+using ModelContextProtocol.AspNetCore;
 
 // MCP uses stdio for JSON-RPC communication. Redirect Console.Out to stderr
 // to prevent any diagnostic output from polluting the MCP protocol stream.
 Console.SetOut(Console.Error);
 
-Infrastructure.ConfigureLogging();
+LoggingSetup.ConfigureLogging();
 
 try
 {
     Log.Information("Starting FinWise MCP Server");
 
-    // Initialize Azure OpenAI client
-    var chatClient = Infrastructure.CreateAzureOpenAIChatClient();
+    // Initialize external dependencies via infrastructure factories
+    var chatClient = AzureOpenAIChatClientFactory.CreateChatClient();
 
-    // Load configuration
     var configuration = new ConfigurationBuilder()
         .SetBasePath(AppContext.BaseDirectory)
         .AddJsonFile("appsettings.json", optional: false)
@@ -41,79 +32,9 @@ try
         .AddEnvironmentVariables()
         .Build();
 
-    // Configure CosmosDB options
-    var cosmosDbOptions = new CosmosDbOptions();
-    configuration.GetSection(CosmosDbOptions.SectionName).Bind(cosmosDbOptions);
-
-    // Create profile store based on configuration
-    IUserProfileStore profileStore;
-    if (cosmosDbOptions.Enabled)
-    {
-        Log.Information("Using CosmosDB profile store (Endpoint: {Endpoint}, Database: {Database})",
-            cosmosDbOptions.Endpoint, cosmosDbOptions.DatabaseName);
-
-        var cosmosClientOptions = new CosmosClientOptions
-        {
-            UseSystemTextJsonSerializerWithOptions = new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-            }
-        };
-
-        if (cosmosDbOptions.AllowInsecureTls)
-        {
-            Log.Warning("CosmosDB TLS validation disabled - for development use only");
-            cosmosClientOptions.HttpClientFactory = () => new HttpClient(new HttpClientHandler
-            {
-                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-            });
-            cosmosClientOptions.ConnectionMode = ConnectionMode.Gateway;
-        }
-
-        var cosmosClient = new CosmosClient(cosmosDbOptions.Endpoint, cosmosDbOptions.Key, cosmosClientOptions);
-        profileStore = new CosmosDbUserProfileStore(cosmosClient, Options.Create(cosmosDbOptions));
-    }
-    else
-    {
-        Log.Information("Using in-memory profile store");
-        profileStore = new InMemoryUserProfileStore();
-    }
-
-    AgentSessionStore sessionStore;
-    var redisOptions = new RedisOptions();
-    configuration.GetSection(RedisOptions.SectionName).Bind(redisOptions);
-
-    if (redisOptions.Enabled)
-    {
-        Log.Information("Using Redis session store (Host: {RedisHost}, TTL: {Ttl} min)",
-            redisOptions.ConnectionString.Split(',')[0], redisOptions.SessionTtlMinutes);
-
-        var redis = await ConnectionMultiplexer.ConnectAsync(redisOptions.ConnectionString);
-        sessionStore = new RedisAgentSessionStore(redis, TimeSpan.FromMinutes(redisOptions.SessionTtlMinutes), "orchestrator_agent");
-    }
-    else
-    {
-        Log.Information("Using in-memory session store");
-        sessionStore = new InMemoryAgentSessionStore();
-    }
-
-    // Resolve the stock specialized agent from Azure AI Foundry
-    var stockAgentEndpoint = Environment.GetEnvironmentVariable("STOCK_AGENT_PROJECT_ENDPOINT")
-        ?? throw new InvalidOperationException("Environment variable 'STOCK_AGENT_PROJECT_ENDPOINT' is required.");
-    var stockAgentName = Environment.GetEnvironmentVariable("STOCK_AGENT_NAME")
-        ?? throw new InvalidOperationException("Environment variable 'STOCK_AGENT_NAME' is required.");
-    var stockAgentTenantId = Environment.GetEnvironmentVariable("FINWISE_AZURE_TENANT_ID")
-        ?? throw new InvalidOperationException("Environment variable 'FINWISE_AZURE_TENANT_ID' is required.");
-    var stockAgentClientId = Environment.GetEnvironmentVariable("FINWISE_AZURE_CLIENT_ID")
-        ?? throw new InvalidOperationException("Environment variable 'FINWISE_AZURE_CLIENT_ID' is required.");
-    var stockAgentClientSecret = Environment.GetEnvironmentVariable("FINWISE_AZURE_CLIENT_SECRET")
-        ?? throw new InvalidOperationException("Environment variable 'FINWISE_AZURE_CLIENT_SECRET' is required.");
-
-    var stockAgentFactory = new StockSpecializedAgentFactory(
-        new AIProjectClient(new Uri(stockAgentEndpoint), new ClientSecretCredential(stockAgentTenantId, stockAgentClientId, stockAgentClientSecret)),
-        stockAgentName);
-    var stockAgent = await stockAgentFactory.CreateAgentAsync();
+    var profileStore = UserProfileStoreFactory.CreateProfileStore(configuration);
+    var (sessionStore, redis, redisOptions) = await AgentSessionStoreFactory.CreateSessionStoreAsync(configuration);
+    var stockAgent = await StockAgentFactory.TryCreateStockAgentAsync();
 
     var workflowService = new FinWiseWorkflowService(chatClient, profileStore, sessionStore, stockAgent);
 
@@ -122,8 +43,16 @@ try
     builder.Logging.AddSerilog();
 
     builder.Services.AddSingleton(workflowService);
-    builder.Services.AddSingleton(new McpSessionMapping());
     builder.Services.AddHttpContextAccessor();
+
+    if (redis is not null)
+    {
+        // MCP session migration: stores MCP initialize handshake params in Redis (mcpinit:* keys)
+        // so any instance can reconstruct the MCP transport session. Separate from agent session
+        // storage (agentsession:* keys) which holds conversation state.
+        builder.Services.AddSingleton<ISessionMigrationHandler>(
+            new RedisSessionMigrationHandler(redis, TimeSpan.FromMinutes(redisOptions.SessionTtlMinutes)));
+    }
 
     builder.Services
         .AddMcpServer(options =>
@@ -143,6 +72,7 @@ try
 
     var app = builder.Build();
     app.MapMcp("/mcp");
+    app.MapGet("/health", () => "healthy");
 
     app.Lifetime.ApplicationStarted.Register(() =>
     {
@@ -161,7 +91,7 @@ try
 }
 catch (Exception ex)
 {
-    Infrastructure.HandleMcpServerException(ex, "Startup");
+    LoggingSetup.HandleMcpServerException(ex, "Startup");
     Log.Fatal(ex, "Fatal error during MCP Server startup");
     return 1;
 }

@@ -1,7 +1,7 @@
 using FinWise.MultiAgentWorkflow.Agents.AdvisorAgent;
 using FinWise.MultiAgentWorkflow.Agents.OrchestratorAgent;
 using FinWise.MultiAgentWorkflow.Agents.UserProfileAgent;
-using FinWise.MultiAgentWorkflow.Infrastructure.UserProfileStore;
+using FinWise.MultiAgentWorkflow.Infrastructure.UserProfileStores;
 using FinWise.MultiAgentWorkflow.Session;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Hosting;
@@ -17,8 +17,8 @@ namespace FinWise.MultiAgentWorkflow.Workflow;
 /// Core multi-agent workflow service for FinWise financial advising.
 /// Orchestrates the handoff workflow between orchestrator, profile, and advisor agents.
 ///
-/// This class is transport-agnostic: it receives a plain agentSessionId and returns
-/// a <see cref="WorkflowResponse"/>. The MCP/HTTP session mapping stays in the host.
+/// This class is transport-agnostic: it receives a plain agentSessionId (the MCP Session ID
+/// under 008.A) and returns a <see cref="WorkflowResponse"/>.
 ///
 /// Per Microsoft Agent Framework patterns:
 /// - AIAgent instances are stateless; all state is preserved in AgentSession
@@ -29,19 +29,18 @@ public class FinWiseWorkflowService
 {
     private readonly IChatClient _chatClient;
     private readonly IUserProfileStore _profileStore;
-    private readonly AIAgent _stockAgent;
+    private readonly AIAgent? _stockAgent;
     private readonly AgentSessionManager _sessionManager;
 
     public FinWiseWorkflowService(
         IChatClient chatClient,
         IUserProfileStore profileStore,
         AgentSessionStore sessionStore,
-        AIAgent stockAgent)
+        AIAgent? stockAgent)
     {
         ArgumentNullException.ThrowIfNull(chatClient);
         ArgumentNullException.ThrowIfNull(profileStore);
         ArgumentNullException.ThrowIfNull(sessionStore);
-        ArgumentNullException.ThrowIfNull(stockAgent);
 
         _chatClient = chatClient;
         _profileStore = profileStore;
@@ -55,7 +54,7 @@ public class FinWiseWorkflowService
     /// session persistence, and post-workflow reset detection.
     /// </summary>
     /// <param name="agentSessionId">
-    /// The agent session identifier (caller manages the mapping).
+    /// The agent session identifier — the MCP Session ID, used directly as the storage key.
     /// Called <c>conversationId</c> in the SDK's <c>AgentSessionStore</c> — same concept.
     /// </param>
     /// <param name="query">The user's message.</param>
@@ -66,11 +65,6 @@ public class FinWiseWorkflowService
 
         using (LogContext.PushProperty("RequestId", requestId))
         {
-            // Capture the caller's original session ID before any mutation (reset may generate a new one).
-            // Catch blocks use this because the caller only knows the original ID, and a failed reset
-            // may leave the new ID unpersisted.
-            var originalAgentSessionId = agentSessionId;
-
             try
             {
                 // First create agents with profile-only access (safe default).
@@ -144,8 +138,6 @@ public class FinWiseWorkflowService
                 // Check if the orchestrator's reset tool was called during workflow execution.
                 // The token is a mutable reference type — mutations by tools inside the workflow
                 // are visible here because AsyncLocal copies references, not objects.
-                // If ClearSessionAsync throws after the flag is detected, the catch block returns
-                // originalAgentSessionId — the next request resumes on the old session (graceful degradation).
                 bool wasReset = resetToken.IsRequested;
                 if (wasReset && !isProfileReady)
                 {
@@ -161,9 +153,7 @@ public class FinWiseWorkflowService
                     // the user always sees a consistent reset confirmation.
                     response = "Your session has been reset. Please provide your email address to start a new conversation.";
                     await _sessionManager.ClearSessionAsync(agentSessionId);
-                    agentSessionId = Guid.NewGuid().ToString();
-                    Log.Information("Session reset via orchestrator tool. New session {AgentSessionId} (previous {PreviousAgentSessionId})",
-                        agentSessionId, originalAgentSessionId);
+                    Log.Information("Session reset via orchestrator tool. Cleared session {AgentSessionId}", agentSessionId);
                 }
                 else
                 {
@@ -184,10 +174,10 @@ public class FinWiseWorkflowService
             }
             catch (OperationCanceledException)
             {
-                Log.Warning("Workflow execution timed out for session {AgentSessionId}", originalAgentSessionId);
+                Log.Warning("Workflow execution timed out for session {AgentSessionId}", agentSessionId);
                 return new WorkflowResponse(
                     "The request took too long to process. Please try again or provide your email address to get started.",
-                    originalAgentSessionId,
+                    agentSessionId,
                     WasReset: false);
             }
             catch (Exception ex)
@@ -195,28 +185,23 @@ public class FinWiseWorkflowService
                 Log.Error(ex, "Request failed");
                 return new WorkflowResponse(
                     "I apologize, but I encountered an error processing your request. Please try again.",
-                    originalAgentSessionId,
+                    agentSessionId,
                     WasReset: false);
             }
         }
     }
 
     /// <summary>
-    /// Explicitly resets a session. Clears all state and returns a new agentSessionId.
+    /// Explicitly resets a session. Clears all state under the same session ID.
+    /// The next request with this ID will get a fresh session.
     /// User profiles are retained in the store.
     /// </summary>
     /// <param name="agentSessionId">The agent session to reset.</param>
-    /// <returns>A new agentSessionId for the fresh session.</returns>
-    public async Task<string> ResetSessionAsync(string agentSessionId)
+    public async Task ResetSessionAsync(string agentSessionId)
     {
         Log.Information("Resetting AgentSession for {AgentSessionId}", agentSessionId);
         await _sessionManager.ClearSessionAsync(agentSessionId);
-
-        var newAgentSessionId = Guid.NewGuid().ToString();
-        Log.Information("New session {AgentSessionId} created after reset (previous {PreviousAgentSessionId})",
-            newAgentSessionId, agentSessionId);
-
-        return newAgentSessionId;
+        Log.Information("Session cleared for {AgentSessionId}", agentSessionId);
     }
 
     /// <summary>
@@ -239,13 +224,14 @@ public class FinWiseWorkflowService
         AdvisorAgentFactory advisorAgtFactory = new(_chatClient);
         ChatClientAgent advisorAgent = advisorAgtFactory.CreateAgent();
 
-        var stockAgent = _stockAgent;
-
         // Build the handoff workflow — strict hub-and-spoke (all agents route through orchestrator)
         // Gate advisor/stock agents behind profile completion to prevent handoff loops.
         // Without PROFILE_READY, the orchestrator can ONLY route to profile_agent.
+        // Stock agent is optional — excluded from workflow if not configured.
         AIAgent[] availableAgents = isProfileReady
-            ? [profileAgent, advisorAgent, stockAgent]
+            ? _stockAgent is not null
+                ? [profileAgent, advisorAgent, _stockAgent]
+                : [profileAgent, advisorAgent]
             : [profileAgent];
 
         AgentWorkflow workflow = AgentWorkflowBuilder.CreateHandoffBuilderWith(orchestratorAgent)

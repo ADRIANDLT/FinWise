@@ -60,7 +60,7 @@ FinWise.slnx
 │   │   │   ├── ISessionStore.cs
 │   │   │   └── InMemory/
 │   │   │       └── InMemorySessionStore.cs
-│   │   └── UserProfileStore/
+│   │   └── UserProfileStores/
 │   │       ├── IUserProfileStore.cs
 │   │       ├── InMemory/
 │   │       │   └── InMemoryUserProfileStore.cs
@@ -97,7 +97,7 @@ Workflow/FinWiseWorkflowService
     → Session/SessionResetEvaluator            (reset detection logic)
     → Session/ConversationRunContext            (in-flight ambient state)
     → Agents/*                                 (agent factories)
-    → Infrastructure/UserProfileStore/IUserProfileStore  (profile storage)
+    → Infrastructure/UserProfileStores/IUserProfileStore  (profile storage)
 ```
 
 ---
@@ -271,7 +271,7 @@ Tested dependency: its code imports only `Microsoft.Extensions.AI` (`ChatMessage
 | 1 | Delete dead code | Delete `WorkflowExecutionContext` record from `Models.cs` and its 2 test methods from `WorkflowTests.cs` (`WorkflowExecutionContext_Should_Capture_Request_Details`, `WorkflowExecutionContext_Should_Support_Timestamp_Tracking`). Defined but never used in production. Run tests to confirm zero regressions. Commit before structural changes. |
 | 2 | Rename solution | `FinWise-orchestrator-mcp.sln` → `FinWise.slnx`. Note: .NET 10 SDK generates `.slnx` (modern XML solution format) by default instead of legacy `.sln`. |
 | 3 | Create class library project | `src/FinWise.MultiAgentWorkflow/FinWise.MultiAgentWorkflow.csproj` — net10.0, `TreatWarningsAsErrors=true`. Packages: `Microsoft.Agents.AI`, `Microsoft.Agents.AI.Workflows`, `Microsoft.Extensions.AI`, `Microsoft.Extensions.Options`, `Microsoft.Azure.Cosmos`, `Serilog`, `Newtonsoft.Json`. **No** `ModelContextProtocol`, `Azure.AI.OpenAI`, `Microsoft.Extensions.AI.OpenAI`, `Serilog.AspNetCore`. Note: `Serilog` (core) 4.2.0 is the minimum dependency of `Serilog.AspNetCore` 8.0.3 and is already listed in `Directory.Packages.props`. |
-| 4 | Create folder structure | `Agents/OrchestratorAgent/`, `Agents/UserProfileAgent/`, `Agents/AdvisorAgent/`, `Workflow/`, `Session/`, `DomainModel/`, `Infrastructure/SessionStore/InMemory/`, `Infrastructure/UserProfileStore/` |
+| 4 | Create folder structure | `Agents/OrchestratorAgent/`, `Agents/UserProfileAgent/`, `Agents/AdvisorAgent/`, `Workflow/`, `Session/`, `DomainModel/`, `Infrastructure/SessionStore/InMemory/`, `Infrastructure/UserProfileStores/` |
 | 5 | Add to solution | Add all projects to `FinWise.slnx` under `src` and `tests` solution folders. Note: the current `FinWise-orchestrator-mcp.sln` only contains `FinWise.Orchestrator` — the existing test project is not in the solution. The new `FinWise.slnx` must include all 4 projects: `FinWise.MultiAgentWorkflow`, `FinWise.McpServer` (under `src/`), `FinWise.MultiAgentWorkflow.UnitTests`, `FinWise.McpServer.IntegrationTests` (under `tests/`). |
 
 ### Phase 2: Move Existing Files
@@ -282,7 +282,7 @@ Tested dependency: its code imports only `Microsoft.Extensions.AI` (`ChatMessage
 | 7 | Move session logic | `AgentSessionManager.cs`, `SessionResetEvaluator.cs`, `ConversationRunContext.cs` → `MultiAgentWorkflow/Session/` | `FinWise.Orchestrator` → `FinWise.MultiAgentWorkflow.Session` |
 | 8 | Move session store | Extract `ISessionStore` and `SessionData` from `AgentSessionManager.cs` → `Infrastructure/SessionStore/ISessionStore.cs`; `InMemorySessionStore.cs` → `Infrastructure/SessionStore/InMemory/`. Note: `ISessionStore` interface and `SessionData` record are currently defined at the bottom of `AgentSessionManager.cs`, not in their own files. | `FinWise.MultiAgentWorkflow.Infrastructure.SessionStore` / `.InMemory` |
 | 9 | Move model | `Models.cs` → `DomainModel/UserProfile.cs` (only `UserProfile` remains after step 1 deleted `WorkflowExecutionContext`) | `FinWise.Orchestrator` → `FinWise.MultiAgentWorkflow.DomainModel` |
-| 10 | Move profile store | `Infrastructure/UserProfileStore/` entire subtree | `FinWise.Orchestrator.Services.*` → `FinWise.MultiAgentWorkflow.Infrastructure.*` |
+| 10 | Move profile store | `Infrastructure/UserProfileStores/` entire subtree | `FinWise.Orchestrator.Services.*` → `FinWise.MultiAgentWorkflow.Infrastructure.*` |
 | 11 | Update namespaces | All moved files | Verify all `using` statements compile |
 
 ### Phase 3: Create Workflow Service
@@ -376,7 +376,7 @@ Zero MCP dependencies. LLM-provider-agnostic (receives IChatClient abstraction).
 | `Session/` | Conversation state: persist/restore (`AgentSessionManager`), reset detection (`SessionResetEvaluator`), ambient context (`ConversationRunContext`), shared constants + `ExtractUserIdFromConversationHistory` (`SessionConstants`), email validation (`EmailValidator`) |
 | `DomainModel/` | Domain model: `UserProfile` |
 | `Infrastructure/SessionStore/` | Session persistence infrastructure. Interface + provider implementations (InMemory, future Redis) |
-| `Infrastructure/UserProfileStore/` | Profile persistence infrastructure. Interface + provider implementations (InMemory, CosmosDb) |
+| `Infrastructure/UserProfileStores/` | Profile persistence infrastructure. Interface + provider implementations (InMemory, CosmosDb) |
 ```
 
 ### `src/FinWise.McpServer/AGENTS.md`
@@ -432,11 +432,11 @@ Update these sections:
 | `src/FinWise.Orchestrator/ConversationRunContext.cs` | `Session/` | `.Session` |
 | `src/FinWise.Orchestrator/InMemorySessionStore.cs` | `Infrastructure/SessionStore/InMemory/` | `.Infrastructure.SessionStore.InMemory` |
 | `src/FinWise.Orchestrator/Models.cs` | `DomainModel/UserProfile.cs` (only `UserProfile` remains — `WorkflowExecutionContext` deleted in step 1) | `.DomainModel` |
-| `src/FinWise.Orchestrator/Services/UserProfileStore/IUserProfileStore.cs` | `Infrastructure/UserProfileStore/` | `.Infrastructure.UserProfileStore` |
-| `src/FinWise.Orchestrator/Services/UserProfileStore/InMemory/InMemoryUserProfileStore.cs` | `Infrastructure/UserProfileStore/InMemory/` | `.Infrastructure.UserProfileStore.InMemory` |
-| `src/FinWise.Orchestrator/Services/UserProfileStore/CosmosDb/CosmosDbUserProfileStore.cs` | `Infrastructure/UserProfileStore/CosmosDb/` | `.Infrastructure.UserProfileStore.CosmosDb` |
-| `src/FinWise.Orchestrator/Services/UserProfileStore/CosmosDb/CosmosDbOptions.cs` | `Infrastructure/UserProfileStore/CosmosDb/` | `.Infrastructure.UserProfileStore.CosmosDb` |
-| `src/FinWise.Orchestrator/Services/UserProfileStore/CosmosDb/UserProfileDocument.cs` | `Infrastructure/UserProfileStore/CosmosDb/` | `.Infrastructure.UserProfileStore.CosmosDb` |
+| `src/FinWise.Orchestrator/Services/UserProfileStore/IUserProfileStore.cs` | `Infrastructure/UserProfileStores/` | `.Infrastructure.UserProfileStores` |
+| `src/FinWise.Orchestrator/Services/UserProfileStore/InMemory/InMemoryUserProfileStore.cs` | `Infrastructure/UserProfileStores/InMemory/` | `.Infrastructure.UserProfileStores.InMemory` |
+| `src/FinWise.Orchestrator/Services/UserProfileStore/CosmosDb/CosmosDbUserProfileStore.cs` | `Infrastructure/UserProfileStores/CosmosDb/` | `.Infrastructure.UserProfileStores.CosmosDb` |
+| `src/FinWise.Orchestrator/Services/UserProfileStore/CosmosDb/CosmosDbOptions.cs` | `Infrastructure/UserProfileStores/CosmosDb/` | `.Infrastructure.UserProfileStores.CosmosDb` |
+| `src/FinWise.Orchestrator/Services/UserProfileStore/CosmosDb/UserProfileDocument.cs` | `Infrastructure/UserProfileStores/CosmosDb/` | `.Infrastructure.UserProfileStores.CosmosDb` |
 
 ### Files to Create
 
@@ -490,7 +490,7 @@ Update these sections:
 | **`Session/` at root level** | Reusable by any agent scenario (single-agent or multi-agent). `AgentSessionManager` takes any `AIAgent`, not just workflows. |
 | **`ConversationRunContext` in `Session/`** | In-flight conversation state — sibling of `AgentSessionManager` (persisted state). Both manage "current conversation state". |
 | **`SessionResetEvaluator` in `Session/`** | Zero workflow dependency. Works with any conversation containing `PROFILE_READY` markers. A standalone profile agent would use it identically. |
-| **`SessionStore` in `Infrastructure/`** | Pure storage infrastructure. Mirrors `UserProfileStore/` pattern (interface + provider implementations). Ready for future Redis provider. |
+| **`SessionStore` in `Infrastructure/`** | Pure storage infrastructure. Mirrors `UserProfileStores/` pattern (interface + provider implementations). Ready for future Redis provider. |
 | **`ISessionStore` injected into `FinWiseWorkflowService`** | Same composition-root principle as `IUserProfileStore` — `Program.cs` creates and injects the store. Enables mocking in unit tests, and future swap to Redis without modifying the workflow service. |
 | **`Serilog` (core) in class library, `Serilog.AspNetCore` in host only** | Class library only uses `Log.*` and `LogContext.PushProperty()` from Serilog core. `Serilog.AspNetCore` would pull ASP.NET Core dependencies into a host-agnostic library. |
 | **Azure OpenAI packages in MCP host only** | `Infrastructure.CreateAzureOpenAIChatClient()` is a deployment decision. The class library is LLM-provider-agnostic via `IChatClient`. |
@@ -543,7 +543,7 @@ After the decoupling is complete, verified, and committed, these internal code c
 | 5 | **Simplify `GetSessionId()`** to case-insensitive header lookup | `McpSessionMapping.cs` (McpServer) | Trivial |
 | 6 | ~~**Externalize agent prompts** to embedded resources or `.txt` files~~ | ~~3 agent factories~~ | ~~Medium~~ — **Done**: prompts externalized to `.prompt.md` files in folder-per-agent layout |
 | 7 | **Extract suspicious-pattern constants** for orchestrator validation | `FinWiseWorkflowService.cs` | Trivial |
-| 8 | ~~**Rename `UserProfileDto` → `UserProfile`** across all files. It's a domain model with business logic (`IsComplete`, `WithUpdates`), not a transfer object.~~ | ~~`DomainModel/`, `Agents/`, `Infrastructure/UserProfileStore/`, tests~~ | ~~Small~~ — **Done**: renamed to `UserProfile` in `DomainModel/` |
+| 8 | ~~**Rename `UserProfileDto` → `UserProfile`** across all files. It's a domain model with business logic (`IsComplete`, `WithUpdates`), not a transfer object.~~ | ~~`DomainModel/`, `Agents/`, `Infrastructure/UserProfileStores/`, tests~~ | ~~Small~~ — **Done**: renamed to `UserProfile` in `DomainModel/` |
 
 **Phase 2 guiding principle**: Each improvement is one commit. Run tests after each. Never mix with feature work.
 

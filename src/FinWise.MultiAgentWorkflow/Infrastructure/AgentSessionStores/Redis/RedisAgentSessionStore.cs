@@ -11,7 +11,7 @@ namespace FinWise.MultiAgentWorkflow.Infrastructure.AgentSessionStores.Redis;
 /// Redis-backed implementation of <see cref="AgentSessionStore"/> for durable session persistence.
 /// Uses StackExchange.Redis with TTL-based expiration.
 ///
-/// Key format: {agentId}:{conversationId} (matches SDK's InMemoryAgentSessionStore convention).
+/// Key format: agentsession:{agentId}:{conversationId} — namespaced to separate from other Redis stores.
 ///
 /// For production use with multiple instances or persistence across restarts.
 /// Falls back to SDK's InMemoryAgentSessionStore when Redis is disabled.
@@ -90,5 +90,5 @@ public sealed class RedisAgentSessionStore : AgentSessionStore, IClearableSessio
         return ValueTask.CompletedTask;
     }
 
-    internal static string GetKey(string agentId, string conversationId) => $"{agentId}:{conversationId}";
+    internal static string GetKey(string agentId, string conversationId) => $"agentsession:{agentId}:{conversationId}";
 }

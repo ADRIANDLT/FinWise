@@ -41,6 +41,13 @@ This directory contains skills — structured prompts that give Copilot domain-s
 | [**security-threat-modeler**](security-threat-modeler/SKILL.md)               | Produce a STRIDE-based threat model with data-flow diagrams, trust boundaries, and mitigations    | _"threat model"_, _"security analysis"_, _"STRIDE analysis"_                    |
 | [**agentic-eval**](agentic-eval/SKILL.md)                                     | Evaluate and improve AI agent outputs using self-critique loops and LLM-as-judge patterns         | _"build an evaluator-optimizer pipeline"_, _"create a rubric-based evaluation"_ |
 
+### Technology Research
+
+| Skill                                                                         | What it does                                                                                                               | Try saying                                                                                 |
+| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| [**microsoft-tech-deep-research**](microsoft-tech-deep-research/SKILL.md)     | Deep research for Microsoft technologies using Microsoft Learn MCP tools — .NET, Azure, Semantic Kernel, Agent Framework    | _"research this Microsoft SDK"_, _"verify Azure API"_, _"check .NET preview package"_      |
+| [**tech-deep-research**](tech-deep-research/SKILL.md)                         | Deep research for any non-Microsoft technology — Python, Node, Java, Go, Rust, or any SDK/framework via web fetch          | _"research this Python library"_, _"verify Node package"_, _"investigate this Go module"_  |
+
 ### Template
 
 | Skill                                                   | What it does                                                                  | Try saying                               |

@@ -1,6 +1,6 @@
 {
-  // Enable automatic discovery of nested AGENTS.md files for GitHub Copilot
-  // See: https://code.visualstudio.com/docs/copilot/customization/custom-instructions#_use-multiple-agentsmd-files-experimental
+  // Enable discovery of nested AGENTS.md files in subfolders
+  // See: https://code.visualstudio.com/docs/copilot/customization/custom-instructions#_use-an-agentsmd-file
   "chat.useNestedAgentsMdFiles": true
   // Editor
   "editor.formatOnSave": true,

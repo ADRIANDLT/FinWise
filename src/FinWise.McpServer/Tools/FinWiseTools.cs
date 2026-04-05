@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using FinWise.McpServer.Infrastructure.McpSession;
 using FinWise.MultiAgentWorkflow.Workflow;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,14 +19,13 @@ public static class FinWiseTools
         CancellationToken cancellationToken = default)
     {
         var workflowService = serviceProvider.GetRequiredService<FinWiseWorkflowService>();
-        var sessionMapping = serviceProvider.GetRequiredService<McpSessionMapping>();
         var httpContext = serviceProvider.GetRequiredService<IHttpContextAccessor>().HttpContext
             ?? throw new InvalidOperationException("HTTP context unavailable for MCP request.");
 
-        string sessionId;
+        string mcpSessionId;
         try
         {
-            sessionId = McpSessionMapping.GetSessionId(httpContext);
+            mcpSessionId = McpSessionAccessor.GetSessionId(httpContext);
         }
         catch (InvalidOperationException ex)
         {
@@ -33,11 +33,7 @@ public static class FinWiseTools
             return "Unable to continue because the MCP client did not provide an MCP-Session-Id header. Please restart the chat from a streamable HTTP client.";
         }
 
-        var agentSessionId = sessionMapping.GetOrCreateAgentSessionId(sessionId);
-        var result = await workflowService.ProcessMessageAsync(agentSessionId, query);
-
-        if (result.WasReset)
-            sessionMapping.UpdateAgentSessionId(sessionId, result.AgentSessionId);
+        var result = await workflowService.ProcessMessageAsync(mcpSessionId, query);
 
         return result.Response;
     }
@@ -48,15 +44,14 @@ public static class FinWiseTools
         IServiceProvider serviceProvider,
         CancellationToken cancellationToken = default)
     {
-        var sessionMapping = serviceProvider.GetRequiredService<McpSessionMapping>();
         var httpContext = serviceProvider.GetRequiredService<IHttpContextAccessor>().HttpContext
             ?? throw new InvalidOperationException("HTTP context unavailable for MCP request.");
         var workflowService = serviceProvider.GetRequiredService<FinWiseWorkflowService>();
 
-        string sessionId;
+        string mcpSessionId;
         try
         {
-            sessionId = McpSessionMapping.GetSessionId(httpContext);
+            mcpSessionId = McpSessionAccessor.GetSessionId(httpContext);
         }
         catch (InvalidOperationException ex)
         {
@@ -64,12 +59,7 @@ public static class FinWiseTools
             return "No active session to reset.";
         }
 
-        var agentSessionId = sessionMapping.TryGetAgentSessionId(sessionId);
-        if (agentSessionId is null)
-            return "No active conversation to reset for this session.";
-
-        var newAgentSessionId = await workflowService.ResetSessionAsync(agentSessionId);
-        sessionMapping.UpdateAgentSessionId(sessionId, newAgentSessionId);
+        await workflowService.ResetSessionAsync(mcpSessionId);
 
         return "Conversation history cleared. User profiles are retained in the store.";
     }

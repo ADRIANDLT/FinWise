@@ -1,7 +1,6 @@
 ---
 description: 'Validate user understanding of architecture, design patterns, design decisions, and technology choices through guided questioning.'
 name: 'Architect Examiner'
-tools: ['codebase', 'web/fetch', 'findTestFiles', 'githubRepo', 'search', 'usages']
 ---
 # Demonstrate Understanding mode instructions
 

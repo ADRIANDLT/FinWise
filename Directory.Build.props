@@ -2,5 +2,10 @@
   <PropertyGroup>
     <RepoRoot>$(MSBuildThisFileDirectory)</RepoRoot>
     <TargetFramework Condition="'$(TargetFramework)' == ''">net10.0</TargetFramework>
+    <!-- Global app version — used for assembly versioning and Docker image tags -->
+    <FinWiseVersion>0.3.1</FinWiseVersion>
+    <Version>$(FinWiseVersion)</Version>
+    <!-- Suppress experimental diagnostics from Microsoft.Agents.AI.Workflows handoff orchestrations (marked [Experimental] in 1.0 GA) -->
+    <NoWarn>$(NoWarn);MAAIW001;OPENAI001</NoWarn>
   </PropertyGroup>
 </Project>
