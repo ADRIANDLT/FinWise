@@ -58,7 +58,7 @@ public class StockSpecializedAgentFactoryTests
         act.Should().NotThrow();
     }
 
-    // NOTE: CreateAgentAsync calls the Foundry API (GetAIAgentAsync())
+    // NOTE: CreateAgentAsync calls the Foundry API (AgentAdministrationClient.GetAgentAsync())
     // which uses sealed Azure SDK types that cannot be mocked. Covered by integration tests.
 
     private class DummyTokenCredential : TokenCredential

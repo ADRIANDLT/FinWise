@@ -5,209 +5,193 @@ description: 'Deep research protocol for Microsoft technologies. Inspects repo p
 
 # Microsoft Deep Research Protocol
 
-Structured research workflow for verifying current official guidance before proposing any approach involving Microsoft technologies. This skill produces a **Research Summary** that the calling agent uses to ground its proposals in verified facts rather than training-data assumptions.
+Structured research workflow for Microsoft technologies. Produces a **Research Summary** grounded in verified facts by leveraging the **Microsoft Learn MCP server** for high-quality documentation search.
 
-## When This Skill Applies
+> **Non-Microsoft technologies?** Use **tech-deep-research** instead — it covers Python, Node, Java, Go, Rust, and any non-Microsoft SDK/framework via web fetch.
 
-This skill is **mandatory** when ANY of these are true:
+---
 
-- The task involves a Microsoft SDK, framework, API, or service
-- Any NuGet package in use has a `-preview`, `-rc`, `-alpha`, or `-beta` suffix
-- The task involves a version upgrade or migration
-- The task depends on version-specific APIs or behaviors
-- The task uses recently released or fast-moving tooling (e.g., Microsoft.Agents.AI, Semantic Kernel, Aspire)
-- The task touches authentication, hosting, deployment, or cloud service integration
-- The developer references a pattern that may be outdated
-- You are uncertain whether your knowledge of the API is current
+## When to Use & Research Depth
+
+**Mandatory** when the task involves any Microsoft SDK/framework/API/service — **in any language** (C#, Python, JS/TS, Java, Go) — or any Azure service, especially Preview packages.
+
+| Depth | Steps | When |
+|-------|-------|------|
+| **Quick Check** | Step 1 (+ one Step 2 MCP query) | Known tech; confirm version or API |
+| **Full Research** ⭐ default | Steps 1→2→3→4 | New packages, upgrades, preview SDKs, large features |
+| **Spot Check** | Step 1 + targeted Step 2 | Review/audit — verify key claims only |
+
+**Force Full Research** for: Agent development (Microsoft.Agents.AI, Semantic Kernel agents, AutoGen), Azure AI services, and any preview package. These areas change too fast for Quick Checks.
+
+---
 
 ## Microsoft Technology Scope
 
-This skill covers all Microsoft-related technologies, including but not limited to:
+Covers **all Microsoft technologies across all languages**. This list is illustrative — the key differentiator is **vendor (Microsoft)**, not language or product.
 
-- .NET / ASP.NET Core
-- Azure SDKs and services (Azure.AI.*, Azure.Identity, Azure.Cosmos, etc.)
-- Microsoft Agent Framework (Microsoft.Agents.AI)
-- Semantic Kernel
-- Azure AI Foundry / Azure OpenAI / Azure AI services
-- Model Context Protocol (ModelContextProtocol.AspNetCore)
-- Microsoft.Extensions.AI
-- C# / MSBuild / NuGet
-- Azure Functions / Azure Container Apps / AKS / App Service
-- Microsoft Aspire / Orleans
-- Microsoft Graph / Entra / Identity
-- ML.NET
-- Visual Studio / VS Code tooling SDKs
+**The .NET ecosystem**: .NET/ASP.NET Core, C#/F#, NuGet, Microsoft.Extensions.AI, Microsoft.Agents.AI, ModelContextProtocol.AspNetCore, Aspire, Orleans, ML.NET, MAUI, Blazor.
+
+**Azure SDKs (all languages)**: `Azure.*`/`Azure.AI.*` (NuGet), `azure-*`/`azure-ai-*` (PyPI), `@azure/*` (npm), `com.azure:*` (Maven), `github.com/Azure/azure-sdk-for-go`. Check the [Azure SDK releases page](https://azure.github.io/azure-sdk/releases/latest/) for new language support.
+
+**Azure services**: Azure OpenAI, Azure AI Foundry, Azure AI Foundry Agent Service, Azure Functions, Container Apps, AKS, Cosmos DB, Azure AI Search, Event Grid/Service Bus, ACR.
+
+**Protocols**: Model Context Protocol (MCP), Agent-to-Agent Protocol (A2A), OpenTelemetry, OpenAPI/Kiota.
+
+**Identity**: Microsoft Entra, MSAL (all languages), Microsoft Graph.
+
+### Agent Development (High-Volatility Area)
+
+> **⚠️ Always Full Research for agent work.** This is Microsoft's most volatile area.
+
+Multiple overlapping frameworks evolve independently:
+- **Microsoft Agent Framework** (`Microsoft.Agents.AI`) — handoff/agent-as-tools orchestration (C#, Python)
+- **Semantic Kernel** — agent orchestration, experimental stage (C#, Python, Java)
+- **AutoGen** — MSR OSS, event-driven multi-agent (Python, emerging .NET)
+- **Azure AI Foundry Agent Service** — managed cloud service
+- **Microsoft.Extensions.AI** — lower-level AI model abstractions
+
+**Why extra rigor**: overlapping frameworks with unclear boundaries, experimental APIs that change between previews, frequent service rebranding (e.g., "Azure AI Agent Service" → "Azure AI Foundry Agent Service (classic)"), orchestration pattern evolution. Always verify: which framework + exact version, API stability level (stable/preview/experimental), current recommended orchestration pattern, MCP/A2A support.
 
 ---
 
 ## Research Execution Steps
 
-Execute these steps **in order** before proposing any approach:
-
 ### Step 1 — Inspect the Repository
 
-Check the actual versions and patterns currently in use:
+Check actual versions in the project's ecosystem:
 
-- `Directory.Packages.props` — centralized NuGet package versions
-- `global.json` — SDK version pinning
-- `.csproj` / `.fsproj` files — `TargetFramework`, `LangVersion`, package references
-- `Directory.Build.props` — shared build properties
-- `packages.lock.json` — if present
-- Existing code patterns for the technology in question
+**For .NET**: `Directory.Packages.props`, `global.json`, `.csproj`/`.fsproj` (TargetFramework, packages), `Directory.Build.props`
 
-Report what you find. Flag any Preview packages explicitly:
+**For Python** (Azure/SK): `pyproject.toml`, `requirements.txt` / `uv.lock`, `poetry.lock`, `.python-version`
 
-> **Preview package detected**: `Microsoft.Agents.AI` version `0.x.y-preview`. APIs may differ from documentation. Research required.
+**For JS/TS** (Azure): `package.json` (`@azure/*`, `@microsoft/*`) / lock files, `.nvmrc`
+
+**For Java** (Azure): `pom.xml`, `build.gradle(.kts)` / `gradle.lockfile`
+
+**All projects**: `Dockerfile`, `docker-compose.yml`, Helm charts, `azure-pipelines.yml`, `bicep`/`arm` templates.
+
+Flag pre-release packages: NuGet `-preview/-rc/-beta`, PyPI `a1/b1/rc1/dev`, npm `@next/@beta`, Maven `-SNAPSHOT`.
+
+**Group related packages**: When multiple pre-release packages share a namespace (e.g., `Microsoft.Agents.AI`, `Microsoft.Agents.AI.Workflows`, `Microsoft.Agents.AI.Hosting`), research them as a **single SDK family**, not individually. They share a release cycle and version cadence.
+
+> **Pre-release detected**: `Microsoft.Agents.AI` family at `1.0.0-rc4` (4 packages). Full Research required.
 
 ### Step 2 — Search Microsoft Learn
 
-Use the Microsoft Learn MCP tools to verify current guidance:
+**Always try MCP tools first** — they provide structured, high-quality results.
 
-- **`microsoft_docs_search`** — find relevant documentation pages for the technology and version
-- **`microsoft_code_sample_search`** — find official code examples (optionally filter by language: `csharp`)
-- **`microsoft_docs_fetch`** — pull full content from the most relevant pages
+1. **MCP tools** (`microsoft_docs_search`, `microsoft_docs_fetch`, `microsoft_code_sample_search`). Tool names may have a server prefix (e.g., `microsoft-learn-microsoft_docs_search`). Code sample search supports `language` filter: `csharp`, `python`, `javascript`, `typescript`, `java`, `go`.
+2. **Check for `llms.txt`** at `https://[docs-site]/llms.txt` for AI-consumable docs ([spec](https://llmstxt.org/)).
+3. **Web fetch fallback** (when MCP unavailable): `learn.microsoft.com/en-us/search/?terms=[query]`, `.NET API: /dotnet/api/[ns]`, Python: `/python/api/overview/azure/[svc]`, JS: `/javascript/api/overview/azure/[svc]`.
 
-Focus your searches on:
-- Current setup and configuration guidance
-- Version-specific API usage and patterns
-- Migration guides (if upgrading)
-- Authentication and identity patterns
-- Service integration patterns
-- Known breaking changes
-- Recommended architecture guidance
+**Disambiguate search terms**: Microsoft uses "agents" in multiple contexts (Azure AI Search agentic retrieval, Microsoft Agent Framework, Azure AI Foundry Agent Service). Use specific package or framework names in MCP queries (e.g., `Microsoft.Agents.AI handoff` not just `agents orchestration`).
+
+Focus on: setup/config, version-specific APIs, migration guides, auth patterns, breaking changes, recommended architecture.
 
 ### Step 3 — Web Research for Gaps
 
-When Microsoft Learn doesn't cover the topic sufficiently (common with Preview SDKs):
+When Learn docs are insufficient (common with Preview SDKs):
 
-- Use `web/fetch` to check official GitHub repos for the SDK (README, samples, changelogs)
-- Check NuGet.org for the package's latest version and release notes
-- Look for official Microsoft blog posts about the Preview release
-- Check GitHub issues for known problems with the specific version
+- **GitHub repos**: README, CHANGELOG, issues, releases
+- **Registries**: NuGet, PyPI, npm, Maven Central
+- **NuGet version history** (fast): `api.nuget.org/v3-flatcontainer/[package-lowercase]/index.json` — returns all published versions as JSON, faster than HTML page
+- **Azure SDK releases dashboard**: `azure.github.io/azure-sdk/releases/latest/`
+- **DevBlogs**: `devblogs.microsoft.com/azure-sdk/`
+- **Agent-specific**: Agent Framework docs (`learn.microsoft.com/en-us/microsoft/agents/`), Semantic Kernel (`learn.microsoft.com/en-us/semantic-kernel/`), AutoGen (`microsoft.github.io/autogen/stable/`), AI Foundry (`learn.microsoft.com/en-us/azure/ai-foundry/`)
 
-### Step 4 — Synthesize and Present the Research Summary
-
-Before proposing any approach, present a **Research Summary** using this template:
+### Step 4 — Research Summary
 
 ```
 ### Research Summary — [Technology/Package Name]
 
 **Package version in repo**: X.Y.Z-preview
-**Latest available version**: X.Y.Z (checked via [source])
+**Latest available**: X.Y.Z (via [source])
 **Stability**: Preview / RC / GA
+**Ecosystem**: NuGet / PyPI / npm / Maven
+**Runtime/Language version**: .NET 10 / Python 3.12 / Node 22 / Java 21
+
 **Key findings**:
-- [Finding 1 — what the current docs say]
-- [Finding 2 — what changed recently]
-- [Finding 3 — known issues or gaps]
+- [Finding 1]
+- [Finding 2]
 
 **Version-sensitive warnings**:
-- [API X was renamed/removed in version Y]
-- [Pattern Z is deprecated in favor of W]
+- [API/pattern changes]
 
-**Confidence level**: High / Medium / Low
+**Confidence**: High / Medium / Low
 **Gaps**: [What couldn't be verified]
+**Sources**: [URLs consulted]
 ```
 
-If research is incomplete, say so explicitly. **Do not present guesses as facts.**
+**Do not present guesses as facts.** If research is incomplete, say so.
 
 ---
 
-## Research Priority Order
+## Research Quality
 
-When researching Microsoft technologies, use this strict priority order:
+### Source Priority
 
-1. **Current repository configuration and actual code** — what's really installed and used
-2. **Microsoft Learn MCP tools** — `microsoft_docs_search`, `microsoft_docs_fetch`, `microsoft_code_sample_search` to verify current guidance
-3. **Official Microsoft samples and repos** — GitHub repos from Microsoft orgs
-4. **First-party release notes / migration guides / changelogs** — NuGet release notes, GitHub releases
-5. **Official Microsoft blog posts** — devblogs.microsoft.com for Preview announcements
-6. **Reputable ecosystem sources** — only for gaps not covered by official sources
+1. Repo code and config (ground truth) → 2. Microsoft Learn via MCP tools **first** → 3. Official Microsoft GitHub repos → 4. Registry metadata + Azure SDK release dashboard → 5. DevBlogs → 6. Ecosystem sources (gaps only)
 
-**Never rely on training data alone** for version-specific behavior. Always verify.
+### Credibility & Recency
 
----
+- **< 3 months**: Trust directly.
+- **3–12 months**: Cross-check against current Learn docs.
+- **> 1 year**: Verify every claim — Microsoft renames services and changes APIs frequently.
+- **DevBlogs about previews**: Check date — preview features may have changed or been cut before GA.
+- **StackOverflow [azure] answers**: Many reference older SDK versions (v11 vs v12). Check dates.
 
-## Version Verification Requirements
+### When Sources Contradict
 
-Before the calling agent proposes an important implementation step for a Microsoft SDK, framework, or API, this skill must verify:
+1. Code/tests > docs. 2. Newer > older. 3. Learn docs > blog posts. 4. Azure SDK release dashboard > cached info. 5. **Always flag contradictions** — never silently pick one.
 
-- Package name(s) and exact installed version(s) in the repo
-- Whether the package is Preview, RC, or GA
-- Target runtime / language version (.NET version, C# version)
-- Breaking changes between the installed version and latest
-- Deprecated APIs or patterns that should be avoided
-- Current recommended patterns from official docs
-- Whether code samples found online are version-aligned with the repo
+### Common Research Pitfalls
 
-If verification is incomplete, say so explicitly. **Do not present guesses as facts.**
+- **Don't assume features are pattern-exclusive.** HITL, checkpointing, and streaming are framework-level features available to ALL workflow types (handoff, graph, sequential). Don't recommend migrating patterns just to access a feature — check if it's already available in the current pattern.
+- **Overview pages reference features documented elsewhere.** A page may list "checkpointing" as a bullet but the actual API is on a separate page. Follow the links.
+- **Existing repo code is the best API documentation for preview packages.** The actual `HandoffBuilder`, `AgentWorkflowBuilder`, or `WorkflowBuilder` calls in the code reveal the real API surface — sometimes more accurately than the docs.
 
----
+### Time-Boxing
 
-## Preview SDK Caution Mode
+| Quick Check | Spot Check | Full Research |
+|-------------|-----------|---------------|
+| ~2 min | ~5 min | ~10 min max |
 
-When working with Preview packages, activate **heightened caution**:
-
-1. **Expect breaking changes** — Preview APIs can change between releases without notice
-2. **Pin versions explicitly** — never recommend floating version ranges for Preview packages
-3. **Check GitHub issues** — look for known issues with the specific Preview version in the repo
-4. **Warn about production readiness** — clearly state when a Preview package is not recommended for production
-5. **Track the upgrade path** — note what's expected to change when the package reaches GA
-6. **Compare with previous previews** — if the repo uses an older preview, check what changed
-7. **Test more aggressively** — Preview APIs may have subtle behavioral differences from documentation
-
-When proposing code that uses Preview APIs, add a warning banner:
-
-> **Preview API**: This code uses `PackageName` version `X.Y.Z-preview`. The API may change in future releases. Verified against current documentation as of [date].
+Stop when: 3+ sources corroborate. Don't stop when: docs and code disagree, service may have been renamed, or package is Preview without issue check.
 
 ---
 
-## Deprecation Awareness
+## Caution Zones
 
-- Flag when older patterns exist in the codebase but are no longer recommended by Microsoft
-- Prefer currently recommended APIs, hosting models, and authentication patterns
-- When a migration path exists, mention it even if it's not part of the current task
-- Distinguish between "deprecated" (will be removed) and "superseded" (still works, newer option available)
+### Preview SDK Mode
 
----
+For `-preview/-rc/-beta`, `a1/b1/rc1`, `@next`, `-SNAPSHOT`: pin exact versions, check GitHub issues, warn about production readiness, compare with previous previews, track GA timeline. Add banner: `> **Preview API**: Uses [package] [version]. May change.`
 
-## Approach Presentation (Microsoft-Specific)
+### Supply Chain Security
 
-When the calling agent presents approaches for Microsoft technology, it **must** explicitly distinguish between:
+Check: preview deps of preview packages, lock file presence, `dependabot.yml`/NuGet audit config, Security tab advisories, Azure SDK release dashboard for known issues.
 
-- **Official Microsoft recommendation** — what Microsoft Learn / official docs say to do today
-- **Repository-specific constraint** — what this particular codebase already does or requires
-- **Engineering judgment** — what the agent recommends regardless of official guidance
+### Deprecation
 
-Use this format:
-
-> **Official recommendation**: Microsoft docs recommend using `X` pattern with `Y` API.
-> **This repo currently**: Uses `Z` pattern (introduced in version W).
-> **My recommendation**: [Align with official / Deviate because...] — here's why: ...
+Flag deprecated patterns. Prefer currently recommended APIs/hosting/auth. Distinguish "deprecated" from "superseded". Note migration paths even if not in current task scope.
 
 ---
 
-## When Understanding Isn't Landing
+## Approach Presentation
 
-If the developer is struggling with a Microsoft-specific concept:
-
-1. Use `microsoft_docs_search` to find the relevant documentation page
-2. Use `microsoft_docs_fetch` to pull the full content and walk through it together
-3. Use `microsoft_code_sample_search` to find official code examples that demonstrate the pattern
-4. If needed, use `web/fetch` to find the official GitHub sample repo and trace through a real example
-
-Don't just explain from memory — **show the official source** and walk through it together.
+Always distinguish: **Official Microsoft recommendation** (Learn docs) vs **Repo constraint** (existing code) vs **Engineering judgment** (your recommendation and why).
 
 ---
 
-## MCP Server Requirement
+## Environment & Tools
 
-This skill requires the **microsoft-learn** MCP server to be configured. If the Microsoft Learn MCP tools (`microsoft_docs_search`, `microsoft_docs_fetch`, `microsoft_code_sample_search`) are not available in the environment, say so clearly and suggest adding:
+**Copilot CLI**: MCP tools built-in + `web_fetch`. **VS Code**: Needs `microsoft-learn` MCP server in `.vscode/mcp.json` (`{"type":"http","url":"https://learn.microsoft.com/api/mcp"}`). **Other environments**: Web fetch fallback. **No web access**: Complete Step 1, flag `Confidence: Low`.
 
-```json
-"microsoft-learn": {
-  "type": "http",
-  "url": "https://learn.microsoft.com/api/mcp"
-}
-```
+Session reuse: don't re-research same package/version; state what was reused.
 
-to the developer's `.vscode/mcp.json` configuration.
+---
+
+## Future-Proofing
+
+This skill teaches **how** to research Microsoft tech, not **what** exists. Technology scope is illustrative — Step 1 (repo inspection) is the ground truth.
+
+**Microsoft-specific trends**: multi-language SDK parity (don't assume C#-only), frequent service renaming, MCP/A2A protocol adoption, .NET annual LTS cycle, Aspire as cloud-native default, agent frameworks in rapid flux. New things we can't predict will appear — the 4-step protocol handles them all.

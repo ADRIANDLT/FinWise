@@ -1,0 +1,53 @@
+# Docker Compose for FinWise — Infrastructure Only
+#
+# Use when running FinWise MCP Server locally via dotnet run.
+# Usage: docker compose -f docker-compose.infra.yml up -d
+
+name: finwise
+
+services:
+  finwise-cosmosdb-emulator:
+    image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:latest
+    container_name: finwise-cosmosdb-emulator
+    ports:
+      - "8081:8081" # NoSQL API endpoint
+      - "10250:10250" # Compute emulator
+      - "10251:10251" # Compute emulator
+      - "10252:10252" # Compute emulator
+      - "10253:10253" # Compute emulator
+      - "10254:10254" # Compute emulator
+    environment:
+      - AZURE_COSMOS_EMULATOR_PARTITION_COUNT=10
+      - AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE=true
+    volumes:
+      - cosmosdb-data:/tmp/cosmos/appdata
+    mem_limit: 3g
+    cpu_count: 2
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f -k https://localhost:8081/_explorer/emulator.pem || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  finwise-redis:
+    image: redis:7.4-alpine
+    container_name: finwise-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --save 60 1 --loglevel warning --maxmemory 200mb --maxmemory-policy volatile-lru
+    volumes:
+      - redis-data:/data
+    mem_limit: 256m
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  cosmosdb-data:
+    driver: local
+  redis-data:
+    driver: local

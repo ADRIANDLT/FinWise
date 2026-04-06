@@ -1,5 +1,5 @@
-﻿using Azure.AI.Projects;
-using Azure.AI.Projects.OpenAI;
+﻿using Azure.AI.Extensions.OpenAI;
+using Azure.AI.Projects;
 using Azure.Identity;
 using FluentAssertions;
 using FinWise.MultiAgentWorkflow.Agents.StockSpecializedAgent;
@@ -72,7 +72,7 @@ public class StockSpecializedAgentIntegrationTests
     public void FoundryConnectivity_CanListAgents_SmokeTest()
     {
         var client = CreateClient();
-        var agents = client.Agents.GetAgents().ToList();
+        var agents = client.AgentAdministrationClient.GetAgents().ToList();
 
         agents.Should().NotBeEmpty("at least one agent should exist in the Foundry project");
     }
@@ -81,7 +81,7 @@ public class StockSpecializedAgentIntegrationTests
     public async Task AgentResponds_WithMeaningfulStockInformation_WhenAskedAboutMicrosoft()
     {
         var projectClient = CreateClient();
-        ProjectResponsesClient responsesClient = projectClient.OpenAI
+        ProjectResponsesClient responsesClient = projectClient.ProjectOpenAIClient
             .GetProjectResponsesClientForAgent(defaultAgent: _agentName);
 
 #pragma warning disable OPENAI001 // Preview API

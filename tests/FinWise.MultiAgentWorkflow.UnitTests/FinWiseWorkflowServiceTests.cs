@@ -1,5 +1,5 @@
 using FluentAssertions;
-using FinWise.MultiAgentWorkflow.Infrastructure.UserProfileStore;
+using FinWise.MultiAgentWorkflow.Infrastructure.UserProfileStores;
 using FinWise.MultiAgentWorkflow.Session;
 using FinWise.MultiAgentWorkflow.Workflow;
 using Microsoft.Agents.AI;
@@ -14,7 +14,7 @@ namespace FinWise.MultiAgentWorkflow.UnitTests;
 /// Unit tests for <see cref="FinWiseWorkflowService"/>.
 /// Tests focus on error-handling paths because workflow execution (via InProcessExecution.RunStreamingAsync)
 /// calls real LLM through IChatClient.CompleteAsync(). Mocking the chat client to throw lets us exercise
-/// the catch blocks, session ID management, and the fix that returns originalAgentSessionId after failures.
+/// the catch blocks, session ID management, and reset behavior.
 /// </summary>
 public class FinWiseWorkflowServiceTests
 {
@@ -147,12 +147,15 @@ public class FinWiseWorkflowServiceTests
     }
 
     [Fact]
-    public async Task ResetSessionAsync_ReturnsNewSessionId()
+    public async Task ResetSessionAsync_ClearsSessionWithoutNewId()
     {
-        var newSessionId = await _sut.ResetSessionAsync("old-session");
+        // ResetSessionAsync clears session data but keeps the same ID.
+        // Calling it should not throw, and the next GetOrCreate should return a fresh session.
+        await _sut.ResetSessionAsync("session-to-reset");
 
-        newSessionId.Should().NotBeNullOrEmpty();
-        newSessionId.Should().NotBe("old-session");
-        Guid.TryParse(newSessionId, out _).Should().BeTrue("returned ID should be a valid GUID");
+        // Verify the session was cleared by checking ProcessMessageAsync still works
+        // with the same ID (it gets a fresh session, not stale data)
+        var result = await _sut.ProcessMessageAsync("session-to-reset", "hello");
+        result.AgentSessionId.Should().Be("session-to-reset");
     }
 }

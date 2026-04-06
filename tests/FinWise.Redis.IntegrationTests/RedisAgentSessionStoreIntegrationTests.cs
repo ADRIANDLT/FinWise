@@ -60,7 +60,7 @@ public class RedisAgentSessionStoreIntegrationTests : IAsyncLifetime
             var server = _redis.GetServer(_redis.GetEndPoints()[0]);
 
             // Clean up all keys created by this test run
-            await foreach (var key in server.KeysAsync(pattern: $"integration_test_agent:{_testPrefix}*"))
+            await foreach (var key in server.KeysAsync(pattern: $"agentsession:integration_test_agent:{_testPrefix}*"))
             {
                 await db.KeyDeleteAsync(key);
             }

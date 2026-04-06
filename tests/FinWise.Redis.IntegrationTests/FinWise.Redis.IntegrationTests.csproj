@@ -25,5 +25,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\FinWise.MultiAgentWorkflow\FinWise.MultiAgentWorkflow.csproj" />
+    <ProjectReference Include="..\..\src\FinWise.McpServer\FinWise.McpServer.csproj" />
   </ItemGroup>
 </Project>

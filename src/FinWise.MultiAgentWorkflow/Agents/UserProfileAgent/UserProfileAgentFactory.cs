@@ -1,5 +1,5 @@
 using FinWise.MultiAgentWorkflow.DomainModel;
-using FinWise.MultiAgentWorkflow.Infrastructure.UserProfileStore;
+using FinWise.MultiAgentWorkflow.Infrastructure.UserProfileStores;
 using Microsoft.Extensions.AI;
 using Serilog;
 using System.ComponentModel;

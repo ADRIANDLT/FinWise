@@ -155,7 +155,7 @@ The spec put files in `Infrastructure/AgentSessionStore/Redis/`. Per [`AGENTS.md
 
 ### About the Process
 
-- Having the CosmosDB infrastructure pattern ([`CosmosDbOptions`](../src/FinWise.MultiAgentWorkflow/Infrastructure/UserProfileStore/CosmosDb/CosmosDbOptions.cs), [`CosmosDbUserProfileStore`](../src/FinWise.MultiAgentWorkflow/Infrastructure/UserProfileStore/CosmosDb/CosmosDbUserProfileStore.cs), Docker Compose, setup docs) as a template made the Redis spec significantly easier to write. The pattern transfers cleanly: Options class → Enabled toggle → Docker service → singleton client → `IAsyncDisposable`.
+- Having the CosmosDB infrastructure pattern ([`CosmosDbOptions`](../src/FinWise.MultiAgentWorkflow/Infrastructure/UserProfileStores/CosmosDb/CosmosDbOptions.cs), [`CosmosDbUserProfileStore`](../src/FinWise.MultiAgentWorkflow/Infrastructure/UserProfileStores/CosmosDb/CosmosDbUserProfileStore.cs), Docker Compose, setup docs) as a template made the Redis spec significantly easier to write. The pattern transfers cleanly: Options class → Enabled toggle → Docker service → singleton client → `IAsyncDisposable`.
 - Five bugs found in a plan is five bugs not discovered during implementation. Each would have cost 15–30 minutes to debug. The `ResetSessionAsync` bug (#2) would have been particularly confusing — a compilation error in a file not mentioned in the spec's change list.
 - The "replaces vs coexists" framing issue (#1) was the most important catch. It wasn't a code bug — it was an intent bug. The spec's own toggle logic contradicted its summary. Only the developer could catch this, because only the developer knew the actual requirement.
 
