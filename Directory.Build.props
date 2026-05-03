@@ -8,4 +8,9 @@
     <!-- Suppress experimental diagnostics from Microsoft.Agents.AI.Workflows handoff orchestrations (marked [Experimental] in 1.0 GA) -->
     <NoWarn>$(NoWarn);MAAIW001;OPENAI001</NoWarn>
   </PropertyGroup>
+  <!-- Pin OpenTelemetry.Api as a direct reference in all projects to override the
+       transitive 1.13.1 (GHSA-g94r-2vxg-569j) with the safe 1.15.3 from Directory.Packages.props -->
+  <ItemGroup>
+    <PackageReference Include="OpenTelemetry.Api" />
+  </ItemGroup>
 </Project>

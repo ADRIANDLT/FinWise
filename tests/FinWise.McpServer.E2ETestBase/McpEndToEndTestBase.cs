@@ -26,7 +26,7 @@ public abstract class McpEndToEndTestBase : IDisposable
     protected McpEndToEndTestBase(ITestOutputHelper output)
     {
         Output = output;
-        HttpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
+        HttpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(2) };
 
         // MCP Streamable HTTP requires the client to accept both application/json and text/event-stream
         HttpClient.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
@@ -190,7 +190,7 @@ public abstract class McpEndToEndTestBase : IDisposable
     }
 
     protected const string TransientErrorResponse = "I apologize, but I encountered an error processing your request. Please try again.";
-    private const int MaxAttempts = 6;
+    private const int MaxAttempts = 4;
 
     protected async Task<string> CallFinancialAdviceTool(string query, string? sessionId = null)
     {
@@ -203,8 +203,8 @@ public abstract class McpEndToEndTestBase : IDisposable
                 return lastResult;
 
             Logger.LogWarning("Transient error on attempt {Attempt}/{Max}, retrying in {Delay}s...",
-                attempt, MaxAttempts, attempt * 4);
-            await Task.Delay(TimeSpan.FromSeconds(attempt * 4));
+                attempt, MaxAttempts, attempt * 3);
+            await Task.Delay(TimeSpan.FromSeconds(attempt * 3));
         }
 
         return lastResult;
@@ -253,6 +253,21 @@ public abstract class McpEndToEndTestBase : IDisposable
     protected async Task<string> CallResetSessionTool(string? sessionId = null)
     {
         return await CallMcpToolAsync("reset_conversation", new { }, sessionId);
+    }
+
+    protected async Task<string> CallGetStorageInfoTool(string? sessionId = null)
+    {
+        return await CallMcpToolAsync("get_storage_info", new { }, sessionId);
+    }
+
+    /// <summary>
+    /// Returns true when the server reports all storage is forced to in-memory
+    /// (ForceInMemoryData=true). Useful for skipping database-specific tests.
+    /// </summary>
+    protected async Task<bool> IsServerInMemoryMode(string? sessionId = null)
+    {
+        var info = await CallGetStorageInfoTool(sessionId);
+        return info.Contains("ForceInMemoryData=true", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

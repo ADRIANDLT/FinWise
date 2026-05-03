@@ -197,11 +197,14 @@ public class FinWiseWorkflowService
     /// User profiles are retained in the store.
     /// </summary>
     /// <param name="agentSessionId">The agent session to reset.</param>
-    public async Task ResetSessionAsync(string agentSessionId)
+    /// <returns><c>true</c> if the session was actually cleared by the store;
+    /// <c>false</c> if the store does not support clearing (e.g., in-memory).</returns>
+    public async Task<bool> ResetSessionAsync(string agentSessionId)
     {
         Log.Information("Resetting AgentSession for {AgentSessionId}", agentSessionId);
-        await _sessionManager.ClearSessionAsync(agentSessionId);
-        Log.Information("Session cleared for {AgentSessionId}", agentSessionId);
+        bool cleared = await _sessionManager.ClearSessionAsync(agentSessionId);
+        Log.Information("Session reset for {AgentSessionId} (cleared: {Cleared})", agentSessionId, cleared);
+        return cleared;
     }
 
     /// <summary>

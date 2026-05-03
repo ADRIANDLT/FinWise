@@ -7,28 +7,22 @@ name: finwise
 
 services:
   finwise-cosmosdb-emulator:
-    image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:latest
+    image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:vnext-preview
     container_name: finwise-cosmosdb-emulator
     ports:
       - "8081:8081" # NoSQL API endpoint
-      - "10250:10250" # Compute emulator
-      - "10251:10251" # Compute emulator
-      - "10252:10252" # Compute emulator
-      - "10253:10253" # Compute emulator
-      - "10254:10254" # Compute emulator
+      - "8080:8080" # Health probe (/alive, /ready, /status)
     environment:
-      - AZURE_COSMOS_EMULATOR_PARTITION_COUNT=10
-      - AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE=true
+      - PROTOCOL=https
     volumes:
-      - cosmosdb-data:/tmp/cosmos/appdata
-    mem_limit: 3g
-    cpu_count: 2
+      - cosmosdb-data:/data
+    mem_limit: 1g
     healthcheck:
-      test: [ "CMD-SHELL", "curl -f -k https://localhost:8081/_explorer/emulator.pem || exit 1" ]
-      interval: 30s
-      timeout: 10s
+      test: [ "CMD-SHELL", "curl -f http://localhost:8080/ready || exit 1" ]
+      interval: 10s
+      timeout: 5s
       retries: 5
-      start_period: 60s
+      start_period: 15s
 
   finwise-redis:
     image: redis:7.4-alpine
