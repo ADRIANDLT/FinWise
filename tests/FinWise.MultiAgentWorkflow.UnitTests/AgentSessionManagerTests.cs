@@ -117,16 +117,25 @@ public class AgentSessionManagerTests
     }
 
     [Fact]
-    public async Task ClearSessionAsync_WithClearableStore_DelegatesToStore()
+    public async Task ClearSessionAsync_WithInMemoryStore_ReturnsFalse()
+    {
+        var result = await _manager.ClearSessionAsync("any-session-id");
+
+        result.Should().BeFalse("InMemoryAgentSessionStore does not support clearing");
+    }
+
+    [Fact]
+    public async Task ClearSessionAsync_WithClearableStore_DelegatesToStoreAndReturnsTrue()
     {
         var mockStore = new Mock<AgentSessionStore>();
         var mockClearable = mockStore.As<IClearableSessionStore>();
         mockClearable.Setup(c => c.ClearSessionAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
 
         var manager = new AgentSessionManager(mockStore.Object);
-        await manager.ClearSessionAsync("session-to-clear");
+        var result = await manager.ClearSessionAsync("session-to-clear");
 
         mockClearable.Verify(c => c.ClearSessionAsync("session-to-clear"), Times.Once);
+        result.Should().BeTrue("store implements IClearableSessionStore");
     }
 
     [Fact]

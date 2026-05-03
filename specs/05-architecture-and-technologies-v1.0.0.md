@@ -644,6 +644,9 @@ Stage 1: BUILD (sdk:10.0)              Stage 2: RUNTIME (aspnet:10.0)
 ## Appendix D: Repository Structure
 
 ```
+├── .github/
+│   └── workflows/
+│       └── ci.yml                                  # CI pipeline (GitHub Actions)
 ├── src/
 │   ├── FinWise.McpServer/                          # Thin MCP host (composition root)
 │   │   ├── Dockerfile                              # Multi-stage Docker build
@@ -662,7 +665,7 @@ Stage 1: BUILD (sdk:10.0)              Stage 2: RUNTIME (aspnet:10.0)
 ├── docker-compose.yml                              # Full local stack
 ├── docker-compose.finwise.yml                      # Server only (Azure-ready)
 ├── docker-compose.infra.yml                        # Infrastructure only
-├── Directory.Build.props                           # Global version (1.0.0)
+├── Directory.Build.props                           # Global version (1.0.1)
 ├── Directory.Packages.props                        # Centralized NuGet versions
 └── FinWise.slnx
 ```
@@ -726,11 +729,61 @@ docker compose down -v   # Remove volumes
 
 ---
 
-## Appendix G: What's NOT in v1.0.0 (Deferred)
+## Appendix G: CI Pipeline (GitHub Actions)
+
+Automated CI via `.github/workflows/ci.yml`, triggered on push/PR to `main` and manual dispatch. Reuses the same Docker Compose stack as local development — no GitHub Actions service containers.
+
+### Dual-Mode Execution
+
+Controlled by `FINWISE_FORCE_IN_MEMORY_DATA` in the `finwise-ci-testing` GitHub Environment:
+
+| Mode | Value | Jobs | Duration |
+|------|-------|------|----------|
+| **Full** | `false` (default) | Unit + Integration + E2E (real databases) | ~12 min |
+| **Fast** | `true` | Unit + E2E only (in-memory stores) | ~7 min |
+
+### Job Graph
+
+```
+resolve-mode ──────────┐
+                       ├──→ e2e-and-container-tests (always, adapts to mode)
+build-and-unit-tests ──┘
+                       └──→ integration-tests (full mode only)
+```
+
+`resolve-mode` and `build-and-unit-tests` run in parallel. Both must complete before the downstream jobs start. `e2e-and-container-tests` and `integration-tests` also run in parallel (in full mode).
+
+| Job | Infrastructure | Mode |
+|-----|---------------|------|
+| `resolve-mode` | None (reads env var) | Always |
+| `build-and-unit-tests` | None | Always |
+| `e2e-and-container-tests` | Full Docker stack (full) or server-only container (fast) | Always (adapts) |
+| `integration-tests` | `docker-compose.infra.yml` (CosmosDB + Redis) | Full only |
+
+### Workflow Hardening
+
+- `permissions: contents: read` — least-privilege `GITHUB_TOKEN`
+- `concurrency: cancel-in-progress: true` — cancels stale runs
+- Job-level timeouts: 2 / 15 / 25 / 20 minutes
+- Docker Compose version check ≥ v2.24 (fail-fast)
+- Secrets validation gate before expensive Docker operations
+- Case-insensitive mode normalization via `tr '[:upper:]' '[:lower:]'`
+- `.env` cleanup and Docker teardown in `if: always()` steps
+- Container logs dumped on failure for diagnosis
+- `.trx` test results uploaded as artifacts with `if-no-files-found: ignore`
+
+### GitHub Environment
+
+A GitHub Environment named `finwise-ci-testing` provides variables and secrets to Jobs 2–4. Only `FINWISE_AZURE_CLIENT_SECRET` is stored as a secret (masked in logs). All other Azure config is stored as environment variables (visible in the GitHub UI for debugging).
+
+> **Design spec**: [Spec 013 — CI GitHub Actions Workflow](013-ci-github-actions-workflow/013-ci-github-actions-workflow.md)
+
+---
+
+## Appendix H: What's NOT in v1.0.0 (Deferred)
 
 | Feature | Target |
 |---------|--------|
-| GitHub Actions CI/CD | v1.1 |
 | Entra ID auth (Redis + CosmosDB) | v1.1 |
 | Azure Managed Redis TLS | v1.1 |
 | Docker image to ACR | v1.1+ |

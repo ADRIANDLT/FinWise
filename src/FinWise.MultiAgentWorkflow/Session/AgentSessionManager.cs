@@ -92,17 +92,19 @@ public class AgentSessionManager
     /// Clears an agent session. For InMemoryAgentSessionStore this is a no-op — orphaned keys
     /// are harmless. For RedisAgentSessionStore, performs an explicit key delete with TTL as safety net.
     /// </summary>
-    public async Task ClearSessionAsync(string agentSessionId)
+    /// <returns><c>true</c> if the session was actually cleared; <c>false</c> if the store
+    /// does not support clearing (e.g., SDK's InMemoryAgentSessionStore).</returns>
+    public async Task<bool> ClearSessionAsync(string agentSessionId)
     {
         if (_sessionStore is IClearableSessionStore clearable)
         {
             await clearable.ClearSessionAsync(agentSessionId);
             Log.Debug("Cleared session for {AgentSessionId}", agentSessionId);
+            return true;
         }
-        else
-        {
-            Log.Debug("ClearSessionAsync called for {AgentSessionId} (no-op for in-memory store)", agentSessionId);
-        }
+
+        Log.Debug("ClearSessionAsync called for {AgentSessionId} (no-op for in-memory store)", agentSessionId);
+        return false;
     }
 }
 

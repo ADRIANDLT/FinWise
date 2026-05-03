@@ -38,9 +38,12 @@ public class DockerContainerSpecificTests : McpEndToEndTestBase
         // Validates: appsettings.Docker.json Redis override, Docker DNS resolves redis:6379
         await EnsureContainerRunning();
         await InitializeMcpSession();
-        await SetupTestProfile();
 
-        // Reset writes/clears Redis — if this succeeds, Redis connectivity works
+        // Skip when the server is forced to in-memory mode — Redis isn't used
+        var inMemory = await IsServerInMemoryMode();
+        Skip.If(inMemory, "Server is running with ForceInMemoryData=true — Redis is not configured, skipping Redis connectivity test");
+
+        // Reset exercises the Redis session store — no profile setup needed to prove connectivity
         var resetResponse = await CallResetSessionTool();
 
         resetResponse.ToLowerInvariant().Should().Contain("cleared",
@@ -69,13 +72,18 @@ public class DockerContainerSpecificTests : McpEndToEndTestBase
         // Validates: appsettings.Docker.json CosmosDB override, cross-container TLS
         await EnsureContainerRunning();
 
+        // Need a session to call get_storage_info
+        var checkSession = await InitializeNewMcpSession();
+        var inMemory = await IsServerInMemoryMode(checkSession);
+        Skip.If(inMemory, "Server is running with ForceInMemoryData=true — CosmosDB is not configured, skipping CosmosDB connectivity test");
+
         string testEmail = $"docker-cosmos-{Guid.NewGuid().ToString("N")[..8]}@example.com";
 
         // Session 1: Create profile (writes to CosmosDB)
         var session1 = await InitializeNewMcpSession();
         await SetupTestProfileWithEmail(testEmail, session1);
 
-        await Task.Delay(1000); // Allow persistence
+        await Task.Delay(500); // Allow persistence
 
         // Session 2: Verify profile retrieval from CosmosDB
         var session2 = await InitializeNewMcpSession();
