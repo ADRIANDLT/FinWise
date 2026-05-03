@@ -60,9 +60,14 @@ public static class FinWiseTools
             return "No active session to reset.";
         }
 
-        await workflowService.ResetSessionAsync(mcpSessionId);
+        bool cleared = await workflowService.ResetSessionAsync(mcpSessionId);
 
-        return "Conversation history cleared. User profiles are retained in the store.";
+        if (cleared)
+            return "Conversation history cleared. User profiles are retained in the store.";
+
+        return "Session reset is only fully supported with a database-backed session store (e.g., Redis). "
+             + "The current in-memory store does not support clearing conversation history. "
+             + "To start fresh, please open a new session.";
     }
 
     [McpServerTool(Name = "get_storage_info")]

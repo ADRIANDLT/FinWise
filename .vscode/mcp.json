@@ -15,14 +15,14 @@
     }
   ],
   "servers": {
-    //"FinWise-MCP-Server-Local": {
-    //  "type": "http",
-    //  "url": "http://localhost:5000/mcp"
-    //},
-    "FinWise-MCP-Server-Azure": {
+    "FinWise-MCP-Server-Local": {
       "type": "http",
-      "url": "https://finwise-staging-mcp-server.wonderfulflower-56d1f5e1.westeurope.azurecontainerapps.io/mcp"
+      "url": "http://localhost:5000/mcp"
     },
+    //"FinWise-MCP-Server-Azure": {
+    //  "type": "http",
+    //  "url": "https://finwise-mcp-server-container-app.whitesky-2a351661.eastus2.azurecontainerapps.io/mcp"
+    //},
     "github": {
       "url": "https://api.githubcopilot.com/mcp",
       "type": "http"

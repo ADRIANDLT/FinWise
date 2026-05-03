@@ -271,16 +271,21 @@ dotnet test FinWise.slnx --filter "Category=Container"
 ## 📁 Project Structure
 
 ```
+├── .github/
+│   └── workflows/
+│       └── ci.yml                           # CI pipeline (GitHub Actions)
 ├── src/
 │   ├── FinWise.McpServer/                  # MCP server host (transport + composition root)
 │   │   └── Dockerfile                      # Multi-stage Docker build for this service
 │   └── FinWise.MultiAgentWorkflow/         # Agent orchestration, session, domain model
 ├── tests/
+│   ├── FinWise.McpServer.UnitTests/        # MCP server unit tests
 │   ├── FinWise.MultiAgentWorkflow.UnitTests/
 │   ├── FinWise.McpServer.IntegrationTests/ # E2E tests against local server
 │   ├── FinWise.McpServer.ContainerTests/   # E2E tests against Docker stack
 │   ├── FinWise.McpServer.E2ETestBase/      # Shared MCP protocol test helpers
 │   ├── FinWise.CosmosDb.IntegrationTests/
+│   ├── FinWise.Redis.IntegrationTests/     # Redis session store integration tests
 │   └── FinWise.StockAgent.IntegrationTests/
 ├── specs/                                   # Feature specifications
 ├── journal/                                 # Project narrative chronicles
@@ -413,6 +418,52 @@ When Docker Compose resolves `${VAR}` substitutions in compose files (e.g., `${F
   ```
 
 > 📖 See [Docker Compose environment variable precedence](https://docs.docker.com/compose/how-tos/environment-variables/envvars-precedence/) for the full official documentation.
+
+---
+
+## ⚙️ CI Pipeline (GitHub Actions)
+
+The project uses a GitHub Actions workflow (`.github/workflows/ci.yml`) triggered on push/PR to `main` and manual dispatch.
+
+### Two Modes
+
+Controlled by `FINWISE_FORCE_IN_MEMORY_DATA` in the `finwise-ci-testing` GitHub Environment:
+
+| Mode | Value | Jobs that run | Speed |
+|------|-------|--------------|-------|
+| **Full** | `false` (default) | Unit + Integration + E2E (real databases) | ~12 min |
+| **Fast** | `true` | Unit + E2E only (in-memory stores) | ~7 min |
+
+### Job Graph
+
+```
+resolve-mode ──────────┐
+                       ├──→ e2e-and-container-tests (always, adapts to mode)
+build-and-unit-tests ──┘
+                       └──→ integration-tests (full mode only)
+```
+
+### GitHub Environment Setup
+
+Create a GitHub Environment named **`finwise-ci-testing`** at Settings → Environments with:
+
+**Environment secret** (masked in logs):
+
+| Secret | Purpose |
+|--------|--------|
+| `FINWISE_AZURE_CLIENT_SECRET` | Azure service principal credential |
+
+**Environment variables** (visible, non-sensitive):
+
+| Variable | Purpose |
+|----------|--------|
+| `FINWISE_AZURE_AI_FOUNDRY_PROJECT_ENDPOINT` | Azure AI Foundry project endpoint |
+| `FINWISE_AZURE_AI_FOUNDRY_LLM_DEPLOYMENT_NAME` | LLM deployment name |
+| `FINWISE_AZURE_TENANT_ID` | Azure AD tenant ID |
+| `FINWISE_AZURE_CLIENT_ID` | Service principal client ID |
+| `STOCK_AGENT_PROJECT_ENDPOINT` | Stock Agent Foundry endpoint |
+| `STOCK_AGENT_NAME` | Stock Agent name |
+| `FINWISE_FORCE_IN_MEMORY_DATA` | `false` for full mode, `true` for fast mode |
 
 ---
 
