@@ -1,0 +1,11 @@
+flowchart TD
+  orchestrator_agent["orchestrator_agent (Start)"];
+  profile_agent["profile_agent"];
+  advisor_agent["advisor_agent"];
+  stock_agent["stock_agent"];
+  orchestrator_agent --> profile_agent;
+  orchestrator_agent --> advisor_agent;
+  orchestrator_agent --> stock_agent;
+  profile_agent --> orchestrator_agent;
+  advisor_agent --> orchestrator_agent;
+  stock_agent --> orchestrator_agent;

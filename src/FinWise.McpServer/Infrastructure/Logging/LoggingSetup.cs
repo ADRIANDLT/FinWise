@@ -47,7 +47,7 @@ public static class LoggingSetup
         }
         else if (ex is HttpRequestException)
         {
-            Log.Warning("Network or API communication issue - check Azure OpenAI endpoint accessibility");
+            Log.Warning("Network or API communication issue - check Azure AI Foundry project endpoint accessibility");
         }
     }
 }

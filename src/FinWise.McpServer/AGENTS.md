@@ -4,7 +4,7 @@ Thin MCP server host — transport + composition root. Delegates all logic to `F
 
 ## Technology
 
-.NET 10, C# latest, ASP.NET Core, MCP via ModelContextProtocol.AspNetCore, Serilog, Azure OpenAI.
+.NET 10, C# latest, ASP.NET Core, MCP via ModelContextProtocol.AspNetCore, Serilog, Azure AI Foundry (via `AIProjectClient` + Responses-backed `IChatClient`).
 Packages centralized in `Directory.Packages.props`.
 
 ## MUST

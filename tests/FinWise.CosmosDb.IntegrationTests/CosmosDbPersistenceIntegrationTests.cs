@@ -10,17 +10,24 @@ using Xunit;
 namespace FinWise.CosmosDb.IntegrationTests;
 
 /// <summary>
-/// Integration tests that verify CosmosDB emulator data persistence across
-/// container stop/start cycles.
+/// Integration tests that verify CosmosDB data persistence across
+/// independent client instances (and emulator container restarts when using Docker).
+///
+/// Runs against the CosmosDB emulator (default) or Azure Cosmos DB cloud.
+///
+/// Configuration via environment variables (falls back to emulator defaults):
+///   FINWISE_COSMOSDB_ENDPOINT           — CosmosDB endpoint URL
+///   FINWISE_COSMOSDB_KEY                — CosmosDB account key
+///   FINWISE_COSMOSDB_ALLOW_INSECURE_TLS — "true" for emulator (default for localhost), "false" for Azure
 ///
 /// These tests use a fixed, well-known database (not cleaned up after tests)
-/// to prove that profiles written to CosmosDB survive emulator restarts.
+/// to prove that profiles written to CosmosDB survive across connections.
 ///
-/// Manual verification workflow:
+/// Manual verification workflow (emulator):
 /// 1. Run the "write" test:  dotnet test --filter "WriteProfile_ForPersistenceVerification"
 /// 2. Stop infrastructure:   docker compose -f docker-compose.infra.yml stop
 /// 3. Start infrastructure:  docker compose -f docker-compose.infra.yml start
-/// 4. Run the "read" test:   dotnet test --filter "ReadProfile_SurvivesEmulatorRestart"
+/// 4. Run the "read" test:   dotnet test --filter "ReadProfile_SurvivesRestart"
 ///
 /// The automated test verifies the equivalent scenario using two independent
 /// CosmosDbUserProfileStore instances against the same database.
@@ -28,8 +35,21 @@ namespace FinWise.CosmosDb.IntegrationTests;
 [Trait("Category", "Integration")]
 public class CosmosDbPersistenceIntegrationTests : IAsyncLifetime
 {
-    private const string EmulatorEndpoint = "https://localhost:8081/";
-    private const string EmulatorKey = "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==";
+    private const string DefaultEmulatorEndpoint = "https://localhost:8081/";
+    private const string DefaultEmulatorKey = "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==";
+
+    private static readonly string Endpoint =
+        Environment.GetEnvironmentVariable("FINWISE_COSMOSDB_ENDPOINT") is { Length: > 0 } ep
+            ? ep : DefaultEmulatorEndpoint;
+
+    private static readonly string Key =
+        Environment.GetEnvironmentVariable("FINWISE_COSMOSDB_KEY") is { Length: > 0 } key
+            ? key : DefaultEmulatorKey;
+
+    private static readonly bool AllowInsecureTls =
+        Environment.GetEnvironmentVariable("FINWISE_COSMOSDB_ALLOW_INSECURE_TLS") is { Length: > 0 } val
+            ? string.Equals(val, "true", StringComparison.OrdinalIgnoreCase)
+            : Endpoint.Contains("localhost") || Endpoint.Contains("127.0.0.1");
 
     /// <summary>
     /// Fixed database name — intentionally NOT cleaned up after tests so data
@@ -44,13 +64,18 @@ public class CosmosDbPersistenceIntegrationTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        if (!await IsEmulatorAvailable())
+        try
         {
-            return;
+            _client = CreateCosmosClient();
+            await _client.ReadAccountAsync();
+            _store = CreateStore(_client);
         }
-
-        _client = CreateCosmosClient();
-        _store = CreateStore(_client);
+        catch
+        {
+            // CosmosDB not available — tests will be skipped
+            _client?.Dispose();
+            _client = null;
+        }
     }
 
     public Task DisposeAsync()
@@ -66,10 +91,10 @@ public class CosmosDbPersistenceIntegrationTests : IAsyncLifetime
     /// Run this test, then stop/start the emulator, then run
     /// <see cref="ReadProfile_SurvivesEmulatorRestart"/> to verify persistence.
     /// </summary>
-    [Fact]
+    [SkippableFact]
     public async Task WriteProfile_ForPersistenceVerification()
     {
-        SkipIfEmulatorNotAvailable();
+        SkipIfCosmosDbNotAvailable();
 
         // Arrange
         var profile = new UserProfile(
@@ -97,15 +122,15 @@ public class CosmosDbPersistenceIntegrationTests : IAsyncLifetime
     /// fresh CosmosClient + store instance — proving the data is durably stored
     /// in CosmosDB and not held in memory.
     ///
-    /// For manual stop/start verification:
+    /// For manual emulator stop/start verification:
     /// 1. Run WriteProfile_ForPersistenceVerification
     /// 2. docker compose -f docker-compose.infra.yml stop / start
-    /// 3. Run this test alone: dotnet test --filter "ReadProfile_SurvivesEmulatorRestart"
+    /// 3. Run this test alone: dotnet test --filter "ReadProfile_SurvivesRestart"
     /// </summary>
-    [Fact]
-    public async Task ReadProfile_SurvivesEmulatorRestart()
+    [SkippableFact]
+    public async Task ReadProfile_SurvivesRestart()
     {
-        SkipIfEmulatorNotAvailable();
+        SkipIfCosmosDbNotAvailable();
 
         // Ensure profile exists (idempotent write — safe to run repeatedly)
         var profile = new UserProfile(
@@ -124,9 +149,8 @@ public class CosmosDbPersistenceIntegrationTests : IAsyncLifetime
 
         // Assert — profile must exist and be complete
         retrieved.Should().NotBeNull(
-            "profile should survive emulator restarts when AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE=true " +
-            "and volume is mounted at /tmp/cosmos/appdata. " +
-            "If this fails after emulator restart, data persistence is broken.");
+            "profile should survive across independent client instances — " +
+            "data is durably stored in CosmosDB.");
 
         retrieved!.UserId.Should().Be(PersistenceTestUserId);
         retrieved.RiskTolerance.Should().Be("Moderate");
@@ -141,10 +165,10 @@ public class CosmosDbPersistenceIntegrationTests : IAsyncLifetime
     /// new CosmosDbUserProfileStore). This simulates the scenario where the
     /// emulator is stopped and restarted between write and read.
     /// </summary>
-    [Fact]
+    [SkippableFact]
     public async Task Profile_SurvivesIndependentStoreInstances()
     {
-        SkipIfEmulatorNotAvailable();
+        SkipIfCosmosDbNotAvailable();
 
         // Arrange — unique user for this test run to avoid interference
         var userId = $"persistence-e2e-{Guid.NewGuid():N}@finwise.com";
@@ -183,14 +207,18 @@ public class CosmosDbPersistenceIntegrationTests : IAsyncLifetime
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
         };
-        clientOptions.HttpClientFactory = () => new HttpClient(new HttpClientHandler
-        {
-            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-        });
-        clientOptions.ConnectionMode = ConnectionMode.Gateway;
-        clientOptions.LimitToEndpoint = true;
 
-        return new CosmosClient(EmulatorEndpoint, EmulatorKey, clientOptions);
+        if (AllowInsecureTls)
+        {
+            clientOptions.HttpClientFactory = () => new HttpClient(new HttpClientHandler
+            {
+                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+            });
+            clientOptions.ConnectionMode = ConnectionMode.Gateway;
+            clientOptions.LimitToEndpoint = true;
+        }
+
+        return new CosmosClient(Endpoint, Key, clientOptions);
     }
 
     private static CosmosDbUserProfileStore CreateStore(CosmosClient client)
@@ -198,39 +226,20 @@ public class CosmosDbPersistenceIntegrationTests : IAsyncLifetime
         var options = new CosmosDbOptions
         {
             Enabled = true,
-            Endpoint = EmulatorEndpoint,
-            Key = EmulatorKey,
+            Endpoint = Endpoint,
+            Key = Key,
             DatabaseName = PersistenceTestDbName,
             ContainerName = PersistenceTestContainerName,
-            AllowInsecureTls = true
+            AllowInsecureTls = AllowInsecureTls
         };
 
         return new CosmosDbUserProfileStore(client, Options.Create(options));
     }
 
-    private static async Task<bool> IsEmulatorAvailable()
+    private void SkipIfCosmosDbNotAvailable()
     {
-        try
-        {
-            using var handler = new HttpClientHandler
-            {
-                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-            };
-            using var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
-            var response = await httpClient.GetAsync($"{EmulatorEndpoint}_explorer/emulator.pem");
-            return response.IsSuccessStatusCode;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private void SkipIfEmulatorNotAvailable()
-    {
-        if (_store == null)
-        {
-            throw new SkipException("CosmosDB emulator is not available. Run: docker compose -f docker-compose.infra.yml up -d");
-        }
+        Skip.If(_store == null,
+            "CosmosDB is not available. For emulator: docker compose -f docker-compose.infra.yml up -d. " +
+            "For Azure: set FINWISE_COSMOSDB_ENDPOINT and FINWISE_COSMOSDB_KEY env vars.");
     }
 }

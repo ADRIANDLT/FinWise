@@ -1,9 +1,12 @@
-# Docker Compose for FinWise — Full Stack
+# Docker Compose for FinWise — Full Local Stack
 #
-# Full stack:           docker compose up -d
-# Infrastructure only:  docker compose -f docker-compose.infra.yml up -d
+# Full stack (local infra + server):  docker compose up -d
+# Infrastructure only:                docker compose -f docker-compose.infra.yml up -d
+# Server only (Azure DBs):            docker compose -f docker-compose.finwise.yml --env-file .env --env-file .env.azure up -d
 #
-# Includes infrastructure (CosmosDB + Redis) and adds FinWise MCP Server.
+# Includes local infrastructure (CosmosDB emulator + Redis) and FinWise MCP Server.
+# The server definition lives in docker-compose.finwise.yml (single source of truth).
+# This file merges it and adds depends_on so the server waits for local infra.
 #
 # IMPORTANT: "name: finwise" must match docker-compose.infra.yml so both files
 # share the same Docker volumes. Without this, the full-stack compose uses the
@@ -17,41 +20,19 @@ include:
 
 services:
   finwise-mcp-server:
-    build:
-      context: .
-      dockerfile: src/FinWise.McpServer/Dockerfile
-    image: finwise-mcp-server:0.3.1
-    container_name: finwise-mcp-server
-    ports:
-      - "5000:5000"
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Docker
-      # Azure OpenAI (required — from .env file)
-      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
-      - AZURE_OPENAI_DEPLOYMENT_NAME=${AZURE_OPENAI_DEPLOYMENT_NAME}
-      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
-      # Stock Agent (optional — from .env file)
-      - STOCK_AGENT_PROJECT_ENDPOINT=${STOCK_AGENT_PROJECT_ENDPOINT:-}
-      - STOCK_AGENT_NAME=${STOCK_AGENT_NAME:-}
-      - FINWISE_AZURE_TENANT_ID=${FINWISE_AZURE_TENANT_ID:-}
-      - FINWISE_AZURE_CLIENT_ID=${FINWISE_AZURE_CLIENT_ID:-}
-      - FINWISE_AZURE_CLIENT_SECRET=${FINWISE_AZURE_CLIENT_SECRET:-}
+    extends:
+      file: docker-compose.finwise.yml
+      service: finwise-mcp-server
     depends_on:
       finwise-redis:
         condition: service_healthy
       finwise-cosmosdb-emulator:
         condition: service_healthy
-    healthcheck:
-      test: [ "CMD-SHELL", "curl -sf -o /dev/null http://localhost:5000/health || exit 1" ]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 15s
-    mem_limit: 512m
 
 # Usage:
-#   Full stack:           docker compose up -d
-#   Infrastructure only:  docker compose -f docker-compose.infra.yml up -d
-#   Stop:                 docker compose down
-#   Logs:                 docker compose logs -f
-#   Status:               docker compose ps
+#   Full stack (local infra + server):  docker compose up -d
+#   Infrastructure only:                docker compose -f docker-compose.infra.yml up -d
+#   Server only (Azure DBs):            docker compose -f docker-compose.finwise.yml --env-file .env --env-file .env.azure up -d
+#   Stop:                               docker compose down
+#   Logs:                               docker compose logs -f
+#   Status:                             docker compose ps

@@ -1,0 +1,51 @@
+# Docker Compose for FinWise — MCP Server Only
+#
+# Server definition (single source of truth). Can run standalone against
+# Azure-hosted databases, or composed with local infra via docker-compose.yml.
+#
+# Standalone (Azure DBs):  docker compose -f docker-compose.finwise.yml --env-file .env --env-file .env.azure up -d
+# Full local stack:        docker compose up -d  (uses docker-compose.yml which includes this file)
+
+name: finwise
+
+services:
+  finwise-mcp-server:
+    build:
+      context: .
+      dockerfile: src/FinWise.McpServer/Dockerfile
+    image: finwiseproject/finwise-mcp-server:1.0.1
+    container_name: finwise-mcp-server
+    ports:
+      - "5000:5000"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Docker
+      # --- FinWise Azure AI Foundry (required) ---
+      - FINWISE_AZURE_AI_FOUNDRY_PROJECT_ENDPOINT=${FINWISE_AZURE_AI_FOUNDRY_PROJECT_ENDPOINT}
+      - FINWISE_AZURE_AI_FOUNDRY_LLM_DEPLOYMENT_NAME=${FINWISE_AZURE_AI_FOUNDRY_LLM_DEPLOYMENT_NAME}
+      # --- Shared Azure service principal (required) ---
+      - FINWISE_AZURE_TENANT_ID=${FINWISE_AZURE_TENANT_ID}
+      - FINWISE_AZURE_CLIENT_ID=${FINWISE_AZURE_CLIENT_ID}
+      - FINWISE_AZURE_CLIENT_SECRET=${FINWISE_AZURE_CLIENT_SECRET}
+      # --- Stock Agent (optional) ---
+      - STOCK_AGENT_PROJECT_ENDPOINT=${STOCK_AGENT_PROJECT_ENDPOINT:-}
+      - STOCK_AGENT_NAME=${STOCK_AGENT_NAME:-}
+      # --- Data store master toggle ---
+      - FINWISE_FORCE_IN_MEMORY_DATA=${FINWISE_FORCE_IN_MEMORY_DATA:-false}
+      # --- CosmosDB user profile store ---
+      - FINWISE_COSMOSDB_ENABLED=${FINWISE_COSMOSDB_ENABLED:-}
+      - FINWISE_COSMOSDB_ENDPOINT=${FINWISE_COSMOSDB_ENDPOINT:-}
+      - FINWISE_COSMOSDB_KEY=${FINWISE_COSMOSDB_KEY:-}
+      - FINWISE_COSMOSDB_DATABASE_NAME=${FINWISE_COSMOSDB_DATABASE_NAME:-}
+      - FINWISE_COSMOSDB_CONTAINER_NAME=${FINWISE_COSMOSDB_CONTAINER_NAME:-}
+      - FINWISE_COSMOSDB_ALLOW_INSECURE_TLS=${FINWISE_COSMOSDB_ALLOW_INSECURE_TLS:-}
+      # --- Redis session store ---
+      - FINWISE_REDIS_ENABLED=${FINWISE_REDIS_ENABLED:-}
+      - FINWISE_REDIS_CONNECTION_STRING=${FINWISE_REDIS_CONNECTION_STRING:-}
+      - FINWISE_REDIS_SESSION_TTL_MINUTES=${FINWISE_REDIS_SESSION_TTL_MINUTES:-}
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -sf -o /dev/null http://localhost:5000/health || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    mem_limit: 512m

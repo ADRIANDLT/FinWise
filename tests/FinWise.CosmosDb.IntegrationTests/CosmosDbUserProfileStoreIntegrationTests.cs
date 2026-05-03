@@ -12,8 +12,12 @@ namespace FinWise.CosmosDb.IntegrationTests;
 
 /// <summary>
 /// Integration tests for CosmosDbUserProfileStore.
-/// These tests require the CosmosDB emulator to be running.
-/// Run: docker compose up -d
+/// Runs against the CosmosDB emulator (default) or Azure Cosmos DB cloud.
+///
+/// Configuration via environment variables (falls back to emulator defaults):
+///   FINWISE_COSMOSDB_ENDPOINT           — CosmosDB endpoint URL
+///   FINWISE_COSMOSDB_KEY                — CosmosDB account key
+///   FINWISE_COSMOSDB_ALLOW_INSECURE_TLS — "true" for emulator (default for localhost), "false" for Azure
 /// </summary>
 /// <remarks>
 /// These tests are marked with [Trait("Category", "Integration")] to allow
@@ -26,8 +30,21 @@ namespace FinWise.CosmosDb.IntegrationTests;
 [Trait("Category", "Integration")]
 public class CosmosDbUserProfileStoreIntegrationTests : IAsyncLifetime
 {
-    private const string EmulatorEndpoint = "https://localhost:8081/";
-    private const string EmulatorKey = "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==";
+    private const string DefaultEmulatorEndpoint = "https://localhost:8081/";
+    private const string DefaultEmulatorKey = "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==";
+
+    private static readonly string Endpoint =
+        Environment.GetEnvironmentVariable("FINWISE_COSMOSDB_ENDPOINT") is { Length: > 0 } ep
+            ? ep : DefaultEmulatorEndpoint;
+
+    private static readonly string Key =
+        Environment.GetEnvironmentVariable("FINWISE_COSMOSDB_KEY") is { Length: > 0 } key
+            ? key : DefaultEmulatorKey;
+
+    private static readonly bool AllowInsecureTls =
+        Environment.GetEnvironmentVariable("FINWISE_COSMOSDB_ALLOW_INSECURE_TLS") is { Length: > 0 } val
+            ? string.Equals(val, "true", StringComparison.OrdinalIgnoreCase)
+            : Endpoint.Contains("localhost") || Endpoint.Contains("127.0.0.1");
 
     private CosmosClient? _client;
     private CosmosDbUserProfileStore? _store;
@@ -35,41 +52,48 @@ public class CosmosDbUserProfileStoreIntegrationTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        // Skip if emulator is not available
-        if (!await IsEmulatorAvailable())
+        try
         {
-            return;
-        }
-
-        var options = new CosmosDbOptions
-        {
-            Enabled = true,
-            Endpoint = EmulatorEndpoint,
-            Key = EmulatorKey,
-            DatabaseName = _testDatabaseName,
-            ContainerName = "UserProfiles",
-            AllowInsecureTls = true
-        };
-
-        var clientOptions = new CosmosClientOptions();
-        clientOptions.UseSystemTextJsonSerializerWithOptions = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-        };
-
-        if (options.AllowInsecureTls)
-        {
-            clientOptions.HttpClientFactory = () => new HttpClient(new HttpClientHandler
+            var clientOptions = new CosmosClientOptions
             {
-                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-            });
-            clientOptions.ConnectionMode = ConnectionMode.Gateway;
-            clientOptions.LimitToEndpoint = true;
-        }
+                UseSystemTextJsonSerializerWithOptions = new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                }
+            };
 
-        _client = new CosmosClient(EmulatorEndpoint, EmulatorKey, clientOptions);
-        _store = new CosmosDbUserProfileStore(_client, Options.Create(options));
+            if (AllowInsecureTls)
+            {
+                clientOptions.HttpClientFactory = () => new HttpClient(new HttpClientHandler
+                {
+                    ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+                });
+                clientOptions.ConnectionMode = ConnectionMode.Gateway;
+                clientOptions.LimitToEndpoint = true;
+            }
+
+            _client = new CosmosClient(Endpoint, Key, clientOptions);
+            await _client.ReadAccountAsync();
+
+            var options = new CosmosDbOptions
+            {
+                Enabled = true,
+                Endpoint = Endpoint,
+                Key = Key,
+                DatabaseName = _testDatabaseName,
+                ContainerName = "UserProfiles",
+                AllowInsecureTls = AllowInsecureTls
+            };
+
+            _store = new CosmosDbUserProfileStore(_client, Options.Create(options));
+        }
+        catch
+        {
+            // CosmosDB not available — tests will be skipped
+            _client?.Dispose();
+            _client = null;
+        }
     }
 
     public async Task DisposeAsync()
@@ -91,36 +115,17 @@ public class CosmosDbUserProfileStoreIntegrationTests : IAsyncLifetime
         }
     }
 
-    private static async Task<bool> IsEmulatorAvailable()
+    private void SkipIfCosmosDbNotAvailable()
     {
-        try
-        {
-            using var handler = new HttpClientHandler
-            {
-                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-            };
-            using var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
-            var response = await httpClient.GetAsync($"{EmulatorEndpoint}_explorer/emulator.pem");
-            return response.IsSuccessStatusCode;
-        }
-        catch
-        {
-            return false;
-        }
+        Skip.If(_store == null,
+            "CosmosDB is not available. For emulator: docker compose up -d. " +
+            "For Azure: set FINWISE_COSMOSDB_ENDPOINT and FINWISE_COSMOSDB_KEY env vars.");
     }
 
-    private void SkipIfEmulatorNotAvailable()
-    {
-        if (_store == null)
-        {
-            throw new SkipException("CosmosDB emulator is not available. Run: docker compose up -d");
-        }
-    }
-
-    [Fact]
+    [SkippableFact]
     public async Task SetAndGetProfile_RoundTrip_Success()
     {
-        SkipIfEmulatorNotAvailable();
+        SkipIfCosmosDbNotAvailable();
 
         // Arrange
         var userId = $"test_{Guid.NewGuid():N}@example.com";
@@ -143,10 +148,10 @@ public class CosmosDbUserProfileStoreIntegrationTests : IAsyncLifetime
         retrieved.InvestmentTimeframe.Should().Be("20 years");
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task GetProfile_NonExistent_ReturnsNull()
     {
-        SkipIfEmulatorNotAvailable();
+        SkipIfCosmosDbNotAvailable();
 
         // Arrange
         var userId = $"nonexistent_{Guid.NewGuid():N}@example.com";
@@ -158,10 +163,10 @@ public class CosmosDbUserProfileStoreIntegrationTests : IAsyncLifetime
         result.Should().BeNull();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task SetProfile_Update_OverwritesPrevious()
     {
-        SkipIfEmulatorNotAvailable();
+        SkipIfCosmosDbNotAvailable();
 
         // Arrange
         var userId = $"update_{Guid.NewGuid():N}@example.com";
@@ -180,10 +185,10 @@ public class CosmosDbUserProfileStoreIntegrationTests : IAsyncLifetime
         retrieved.InvestmentTimeframe.Should().Be("30 years");
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task HasProfile_WhenExists_ReturnsTrue()
     {
-        SkipIfEmulatorNotAvailable();
+        SkipIfCosmosDbNotAvailable();
 
         // Arrange
         var userId = $"exists_{Guid.NewGuid():N}@example.com";
@@ -197,10 +202,10 @@ public class CosmosDbUserProfileStoreIntegrationTests : IAsyncLifetime
         exists.Should().BeTrue();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task HasProfile_WhenNotExists_ReturnsFalse()
     {
-        SkipIfEmulatorNotAvailable();
+        SkipIfCosmosDbNotAvailable();
 
         // Arrange
         var userId = $"notexists_{Guid.NewGuid():N}@example.com";
@@ -212,10 +217,10 @@ public class CosmosDbUserProfileStoreIntegrationTests : IAsyncLifetime
         exists.Should().BeFalse();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task DeleteProfile_RemovesProfile()
     {
-        SkipIfEmulatorNotAvailable();
+        SkipIfCosmosDbNotAvailable();
 
         // Arrange
         var userId = $"delete_{Guid.NewGuid():N}@example.com";
@@ -230,10 +235,10 @@ public class CosmosDbUserProfileStoreIntegrationTests : IAsyncLifetime
         exists.Should().BeFalse();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task DeleteProfile_NonExistent_DoesNotThrow()
     {
-        SkipIfEmulatorNotAvailable();
+        SkipIfCosmosDbNotAvailable();
 
         // Arrange
         var userId = $"nonexistent_delete_{Guid.NewGuid():N}@example.com";
@@ -245,10 +250,10 @@ public class CosmosDbUserProfileStoreIntegrationTests : IAsyncLifetime
         await act.Should().NotThrowAsync();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task GetProfile_AfterCreation_SurvivesAcrossSessions()
     {
-        SkipIfEmulatorNotAvailable();
+        SkipIfCosmosDbNotAvailable();
 
         // Arrange: simulate creating a profile in session 1
         var userId = $"returning_{Guid.NewGuid():N}@example.com";
@@ -268,10 +273,10 @@ public class CosmosDbUserProfileStoreIntegrationTests : IAsyncLifetime
         retrieved.IsComplete.Should().BeTrue();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task GetProfile_ReturnsCompleteProfile_WhenCalledWithSameEmailAfterReset()
     {
-        SkipIfEmulatorNotAvailable();
+        SkipIfCosmosDbNotAvailable();
 
         // This test mimics the exact user scenario:
         // 1. User creates profile (set_profile calls)
@@ -300,10 +305,10 @@ public class CosmosDbUserProfileStoreIntegrationTests : IAsyncLifetime
         afterReset.RiskTolerance.Should().Be("Aggressive");
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Profile_WithNullFields_PersistsCorrectly()
     {
-        SkipIfEmulatorNotAvailable();
+        SkipIfCosmosDbNotAvailable();
 
         // Arrange - profile with only some fields set (progressive saving)
         var userId = $"partial_{Guid.NewGuid():N}@example.com";
@@ -320,12 +325,4 @@ public class CosmosDbUserProfileStoreIntegrationTests : IAsyncLifetime
         retrieved.InvestmentTimeframe.Should().BeNull();
         retrieved.IsComplete.Should().BeFalse();
     }
-}
-
-/// <summary>
-/// Custom exception for skipping tests when prerequisites are not met.
-/// </summary>
-public class SkipException : Exception
-{
-    public SkipException(string message) : base(message) { }
 }

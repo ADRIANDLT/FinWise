@@ -16,10 +16,8 @@
     <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.3" />
 
     <!-- Azure packages -->
-    <PackageVersion Include="Azure.AI.OpenAI" Version="2.1.0" />
+    <PackageVersion Include="Azure.AI.Extensions.OpenAI" Version="2.0.0" />
     <PackageVersion Include="Azure.AI.Projects" Version="2.0.0" />
-    <!-- Azure.AI.Projects.OpenAI has no 2.0.0 GA release yet; beta.1 is the companion to Azure.AI.Projects 2.0.0 GA. -->
-    <PackageVersion Include="Azure.AI.Projects.OpenAI" Version="2.0.0-beta.1" />
     <PackageVersion Include="Microsoft.Agents.AI.Foundry" Version="1.0.0" />
     <PackageVersion Include="Azure.Identity" Version="1.20.0" />
     <PackageVersion Include="Microsoft.Azure.Cosmos" Version="3.46.1" />

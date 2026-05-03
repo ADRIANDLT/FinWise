@@ -3,13 +3,13 @@
 **Status**: Implemented  
 **Date**: 2026-03-28  
 **Depends on**: [008 — Redis MCP Session](../008-redis-mcp-session/008.A-redis-mcp-session-store-plan.md) (completed)  
-**Version target**: v0.3.1 
+**Version target**: v0.5.0  
 
 ---
 
 ## 1. Summary
 
-Package the FinWise MCP Server as a Docker image and orchestrate it alongside infrastructure services using a dual docker-compose approach: `docker-compose.infra.yml` defines infrastructure only (CosmosDB emulator + Redis) for local `dotnet run` development, while `docker-compose.yml` uses the `include:` directive to import infrastructure and adds the `finwise-mcp-server` service for the full stack (`docker compose up`). Both files share `name: finwise` for volume consistency. Additionally, create a new integration test project that runs E2E tests against the containerized server.
+Package the FinWise MCP Server as a Docker image and add it as a service in the existing `docker-compose.yml`, so the entire stack (MCP server + Redis + CosmosDB emulator) can be launched with a single `docker compose up`. Additionally, create a new integration test project that runs E2E tests against the containerized server.
 
 ---
 
@@ -18,7 +18,7 @@ Package the FinWise MCP Server as a Docker image and orchestrate it alongside in
 ### Goals
 
 1. **Dockerfile** — Multi-stage build producing a minimal `mcr.microsoft.com/dotnet/aspnet:10.0`-based image.
-2. **docker-compose integration** — Dual compose file approach: `docker-compose.infra.yml` for infrastructure (CosmosDB emulator + Redis), `docker-compose.yml` for full stack using `include:` directive to import infrastructure and add `finwise-mcp-server` service. Requires Docker Compose v2.20+ / Docker Desktop 4.22+.
+2. **docker-compose.yml integration** — Add `finwise-mcp` service that depends on Redis and CosmosDB emulator, wired with proper networking.
 3. **Container-targeted integration tests** — New xUnit test project (`FinWise.McpServer.ContainerTests`) that exercises the MCP protocol against the Dockerized server.
 4. **Developer experience** — One-command startup, clear documentation, no manual steps beyond setting Azure OpenAI env vars.
 5. **CI readiness** — The image build and container tests should be runnable in a CI pipeline (no host-dependent paths).
@@ -71,14 +71,14 @@ Key optimizations:
 | **Kestrel binding** | `localhost:5000` (appsettings) | Must bind `0.0.0.0:5000` — only the host changes (`localhost` → `0.0.0.0`), port stays 5000 since explicit Kestrel config overrides the container's default 8080 |
 | **Azure OpenAI credentials** | Env vars (`AZURE_OPENAI_*`) | Passed via `docker-compose.yml` `environment:` block (from `.env` file) |
 | **Stock Agent credentials** | Env vars (`STOCK_AGENT_*`, `FINWISE_AZURE_*`) | Same — optional, server starts without them |
-| **Redis connection** | `localhost:6379` (appsettings) | Override to `finwise-redis:6379` (Docker network hostname) via env var or appsettings override |
-| **CosmosDB connection** | `https://localhost:8081/` (appsettings) | Override to `https://finwise-cosmosdb-emulator:8081/` — already uses `AllowInsecureTls=true` |
+| **Redis connection** | `localhost:6379` (appsettings) | Override to `redis:6379` (Docker network hostname) via env var or appsettings override |
+| **CosmosDB connection** | `https://localhost:8081/` (appsettings) | Override to `https://cosmosdb-emulator:8081/` — already uses `AllowInsecureTls=true` |
 | **Console.SetOut → stderr** | Redirects stdout for MCP stdio transport | HTTP transport only in container — safe to keep, but stdout logs via Serilog work fine |
 | **Non-root user** | Not configured | Run as non-root (`app` user, UID 1654 — default in aspnet:10.0 images) |
 
 ### 3.4 Docker Compose Networking
 
-The dual compose file approach uses a shared project name (`name: finwise`) so that `docker-compose.infra.yml` and `docker-compose.yml` share the same Docker network and volumes. All services (`finwise-redis`, `finwise-cosmosdb-emulator`, `finwise-mcp-server`) resolve as hostnames within the network. The `docker-compose.yml` uses `include: - docker-compose.infra.yml` to import infrastructure services, then adds the `finwise-mcp-server` service. The `include:` directive requires Docker Compose v2.20+ / Docker Desktop 4.22+. The MCP server container references Redis as `finwise-redis:6379` and CosmosDB as `https://finwise-cosmosdb-emulator:8081/`.
+All services in the same `docker-compose.yml` share a default bridge network. Service names (`redis`, `cosmosdb-emulator`, `finwise-mcp`) resolve as hostnames within the network. The MCP server container references Redis as `redis:6379` and CosmosDB as `https://cosmosdb-emulator:8081/`.
 
 ### 3.5 Integration Tests Against Container
 
@@ -97,11 +97,10 @@ The existing `FinWise.McpServer.IntegrationTests` project connects to `http://lo
 
 ```
 ├── src/FinWise.McpServer/
-│   ├── Dockerfile                          # Multi-stage build
 │   └── (existing — no changes except appsettings.Docker.json)
+├── Dockerfile                              # Multi-stage build (repo root)
 ├── .dockerignore                           # Exclude bin/, obj/, .git/, etc.
-├── docker-compose.infra.yml                # Infrastructure only (CosmosDB + Redis)
-├── docker-compose.yml                      # Full stack (includes infra + finwise-mcp-server)
+├── docker-compose.yml                      # Updated — adds finwise-mcp service
 ├── .env.template                           # Template for required env vars
 └── tests/
     ├── FinWise.McpServer.IntegrationTests/ # Existing — refactored to use shared base
@@ -118,7 +117,7 @@ The existing `FinWise.McpServer.IntegrationTests` project connects to `http://lo
 
 ### 4.2 Dockerfile
 
-Placed at **`src/FinWise.McpServer/`** (the docker-compose `build.context` is still repo root `.`, with `dockerfile: src/FinWise.McpServer/Dockerfile` — so the build context has access to both `src/FinWise.McpServer/` and `src/FinWise.MultiAgentWorkflow/`).
+Placed at **repo root** (build context needs access to both `src/FinWise.McpServer/` and `src/FinWise.MultiAgentWorkflow/`).
 
 ```dockerfile
 # ============================================================
@@ -133,9 +132,8 @@ COPY Directory.Packages.props .
 COPY src/FinWise.McpServer/FinWise.McpServer.csproj src/FinWise.McpServer/
 COPY src/FinWise.MultiAgentWorkflow/FinWise.MultiAgentWorkflow.csproj src/FinWise.MultiAgentWorkflow/
 
-# Restore NuGet packages as distinct layer (restore the server project, which
-# transitively restores MultiAgentWorkflow — avoids needing the full .slnx
-# that references test projects not present in the Docker context)
+# Restore NuGet packages as distinct layer
+# NOTE: Cannot use FinWise.slnx here — it references test projects not in the Docker context
 RUN dotnet restore src/FinWise.McpServer/FinWise.McpServer.csproj
 
 # Copy remaining source code
@@ -151,7 +149,7 @@ RUN dotnet publish -c Release -o /app --no-restore
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
-# Install curl for Docker health checks (before switching to non-root user)
+# Install curl for Docker health checks (must be done BEFORE switching to non-root user)
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 
 # Non-root user (default 'app' user in aspnet:10.0, UID 1654)
@@ -159,8 +157,6 @@ USER $APP_UID
 
 COPY --from=build /app .
 
-# FinWise explicitly configures Kestrel to port 5000 (via appsettings.Docker.json),
-# which takes precedence over the aspnet image default of 8080.
 EXPOSE 5000
 
 ENTRYPOINT ["dotnet", "FinWise.McpServer.dll"]
@@ -193,8 +189,7 @@ docs/
 samples/
 to-do/
 my-specs/
-**/*.md
-!src/**/*.md
+*.md
 !README.md
 docker-compose.yml
 .env
@@ -214,10 +209,10 @@ New file in `src/FinWise.McpServer/` for container-specific configuration overri
     }
   },
   "CosmosDb": {
-    "Endpoint": "https://finwise-cosmosdb-emulator:8081/"
+    "Endpoint": "https://cosmosdb-emulator:8081/"
   },
   "Redis": {
-    "ConnectionString": "finwise-redis:6379"
+    "ConnectionString": "redis:6379"
   }
 }
 ```
@@ -228,52 +223,35 @@ The `ASPNETCORE_ENVIRONMENT=Docker` env var in docker-compose activates this fil
 
 ### 4.5 docker-compose.yml Changes
 
-The Docker setup uses a **dual compose file approach**:
-
-- **`docker-compose.infra.yml`** — Infrastructure only (CosmosDB emulator + Redis). Used when running FinWise locally via `dotnet run`. Usage: `docker compose -f docker-compose.infra.yml up -d`
-- **`docker-compose.yml`** — Full stack. Uses `include: - docker-compose.infra.yml` to import infrastructure, then adds `finwise-mcp-server` service. Usage: `docker compose up -d`
-
-Both files declare `name: finwise` so they share the same Docker network and named volumes (`cosmosdb-data`, `redis-data`). The `include:` directive requires **Docker Compose v2.20+ / Docker Desktop 4.22+**.
-
-**`docker-compose.infra.yml`** defines:
-- `finwise-cosmosdb-emulator` — CosmosDB Linux emulator (ports 8081, 10250–10254, with `cosmosdb-data` volume)
-- `finwise-redis` — Redis 7.4 Alpine (port 6379, with `redis-data` volume)
-- Named volumes: `cosmosdb-data`, `redis-data`
-
-**`docker-compose.yml`** adds the `finwise-mcp-server` service:
+Add the `finwise-mcp` service after the existing `redis` service:
 
 ```yaml
-name: finwise
-
-include:
-  - docker-compose.infra.yml
-
-services:
-  finwise-mcp-server:
+  finwise-mcp:
     build:
       context: .
-      dockerfile: src/FinWise.McpServer/Dockerfile
-    image: finwise-mcp-server:0.3.1
-    container_name: finwise-mcp-server
+      dockerfile: Dockerfile
+    container_name: finwise-mcp
     ports:
       - "5000:5000"
     environment:
       - ASPNETCORE_ENVIRONMENT=Docker
+      # Azure OpenAI (required — from .env file)
       - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
       - AZURE_OPENAI_DEPLOYMENT_NAME=${AZURE_OPENAI_DEPLOYMENT_NAME}
       - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
+      # Stock Agent (optional — from .env file)
       - STOCK_AGENT_PROJECT_ENDPOINT=${STOCK_AGENT_PROJECT_ENDPOINT:-}
       - STOCK_AGENT_NAME=${STOCK_AGENT_NAME:-}
       - FINWISE_AZURE_TENANT_ID=${FINWISE_AZURE_TENANT_ID:-}
       - FINWISE_AZURE_CLIENT_ID=${FINWISE_AZURE_CLIENT_ID:-}
       - FINWISE_AZURE_CLIENT_SECRET=${FINWISE_AZURE_CLIENT_SECRET:-}
     depends_on:
-      finwise-redis:
+      redis:
         condition: service_healthy
-      finwise-cosmosdb-emulator:
+      cosmosdb-emulator:
         condition: service_healthy
     healthcheck:
-      test: [ "CMD-SHELL", "curl -sf -o /dev/null http://localhost:5000/health || exit 1" ]
+      test: ["CMD-SHELL", "curl -sf -o /dev/null http://localhost:5000/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -282,9 +260,8 @@ services:
 ```
 
 **Key decisions**:
-- `depends_on` with `condition: service_healthy` ensures `finwise-redis` and `finwise-cosmosdb-emulator` are ready before the MCP server starts.
+- `depends_on` with `condition: service_healthy` ensures Redis and CosmosDB are ready before the MCP server starts.
 - Port mapping `5000:5000` — same port inside and outside the container, consistent with FinWise's existing Kestrel config.
-- `build.dockerfile: src/FinWise.McpServer/Dockerfile` with `build.context: .` (repo root) — so the Dockerfile lives alongside the project but the build context includes all source directories.
 - Azure OpenAI vars use `${VAR}` syntax to read from a `.env` file (secrets never committed).
 - Stock Agent vars use `${VAR:-}` (default empty) making them optional.
 - Health check uses `curl` against a dedicated `/health` endpoint (added to `Program.cs`: `app.MapGet("/health", () => "healthy")`). The `aspnet:10.0` base image does **not** include `curl` — it must be installed in the Dockerfile (see Section 4.2). The `/mcp` endpoint returns 405 for GET requests, making it unsuitable for health checks.
@@ -293,11 +270,11 @@ services:
 
 | Service | Port mapping | Purpose |
 |---------|-------------|----------|
-| `finwise-mcp-server` | `5000:5000` | MCP clients (VS Code, Claude Desktop) and container tests |
-| `finwise-redis` | `6379:6379` | Direct access from host for debugging with Redis CLI / UI tools (e.g., RedisInsight) |
-| `finwise-cosmosdb-emulator` | `8081:8081` | Direct access from host for CosmosDB Data Explorer (`https://localhost:8081/_explorer/`) and UI tools |
+| `finwise-mcp` | `5000:5000` | MCP clients (VS Code, Claude Desktop) and container tests |
+| `redis` | `6379:6379` | Direct access from host for debugging with Redis CLI / UI tools (e.g., RedisInsight) |
+| `cosmosdb-emulator` | `8081:8081` | Direct access from host for CosmosDB Data Explorer (`https://localhost:8081/_explorer/`) and UI tools |
 
-Redis and CosmosDB port mappings are defined in `docker-compose.infra.yml`. They remain unchanged — the `finwise-mcp-server` service simply joins the same network and reaches them via Docker DNS hostnames (`finwise-redis:6379`, `finwise-cosmosdb-emulator:8081`), while developers continue accessing them at `localhost` from the host machine.
+Redis and CosmosDB port mappings **already exist** in the current `docker-compose.yml`. They remain unchanged — the `finwise-mcp` service simply joins the same network and reaches them via Docker DNS hostnames (`redis:6379`, `cosmosdb-emulator:8081`), while developers continue accessing them at `localhost` from the host machine.
 
 ### 4.6 .env.template
 
@@ -325,7 +302,7 @@ Add `.env` to `.gitignore` to prevent accidental secret commits.
 
 #### 4.7.0 Design Decision: Shared Tests, Not Duplicated Tests
 
-The existing `EndToEndMcpTests` and the new Docker container tests are **identical HTTP calls** to the same `localhost:5000/mcp` URL (Docker maps `5000:5000` — Kestrel explicitly binds port 5000 in the container). The only differences are:
+The existing `EndToEndMcpTests` and the new Docker container tests are **identical HTTP calls** to the same `localhost:5000/mcp` URL (Docker maps `5000:8080` internally). The only differences are:
 
 | Aspect | Existing `IntegrationTests` | Docker `ContainerTests` |
 |--------|---------------------------|------------------------|
@@ -397,7 +374,7 @@ Tests that validate concerns **only exercisable** when running against a contain
 | Test | Validation strategy | What it proves |
 |------|-------------------|----------------|
 | `Container_ShouldBeReachableAndHealthy` | `IsServerReachableAsync(30s)` returns true | Dockerfile builds, Kestrel binds `0.0.0.0:5000`, port mapping works |
-| `Container_RedisConnectivity_ShouldWorkOverDockerNetwork` | `CallResetSessionTool()` succeeds (reset writes/clears Redis) | `appsettings.Docker.json` Redis override works, Docker DNS resolves `finwise-redis:6379` |
+| `Container_RedisConnectivity_ShouldWorkOverDockerNetwork` | `CallResetSessionTool()` succeeds (reset writes/clears Redis) | `appsettings.Docker.json` Redis override works, Docker DNS resolves `redis:6379` |
 | `Container_AzureOpenAIEnvVars_ShouldBeInjected` | `CallFinancialAdviceTool("Hello")` returns non-empty response | `.env` → docker-compose → container env var injection chain works |
 | `Container_CosmosDbConnectivity_ShouldWorkOverDockerNetwork` | Complete profile setup with unique email, verify retrieval in new session | `appsettings.Docker.json` CosmosDB override works, cross-container TLS |
 | `Container_StartupTime_ShouldBeReasonable` | `InitializeMcpSession()` completes within 10s | No SDK in runtime image, published assemblies complete |
@@ -407,9 +384,9 @@ Tests that validate concerns **only exercisable** when running against a contain
 | Test | What it validates | Why local E2E can't cover it |
 |------|-------------------|------------------------------|
 | `Container_ShouldBeReachableAndHealthy` | Dockerfile builds, Kestrel binds `0.0.0.0:5000`, port mapping works | Local server binds `localhost:5000` directly |
-| `Container_RedisConnectivity_ShouldWorkOverDockerNetwork` | `appsettings.Docker.json` Redis override (`finwise-redis:6379`), Docker DNS resolution | Local uses `localhost:6379` — different path |
+| `Container_RedisConnectivity_ShouldWorkOverDockerNetwork` | `appsettings.Docker.json` Redis override (`redis:6379`), Docker DNS resolution | Local uses `localhost:6379` — different path |
 | `Container_AzureOpenAIEnvVars_ShouldBeInjected` | `.env` → `docker-compose.yml` → container env var injection chain | Local inherits host env vars directly |
-| `Container_CosmosDbConnectivity_ShouldWorkOverDockerNetwork` | `appsettings.Docker.json` CosmosDB override (`finwise-cosmosdb-emulator:8081`), cross-container TLS | Local uses `localhost:8081` — different path |
+| `Container_CosmosDbConnectivity_ShouldWorkOverDockerNetwork` | `appsettings.Docker.json` CosmosDB override (`cosmosdb-emulator:8081`), cross-container TLS | Local uses `localhost:8081` — different path |
 | `Container_StartupTime_ShouldBeReasonable` | No accidental SDK in runtime image, published assemblies complete | Local `dotnet run` always recompiles, different profile |
 
 ---
@@ -425,8 +402,8 @@ Tests that validate concerns **only exercisable** when running against a contain
 | 1.1 | Create `.dockerignore` at repo root | `.dockerignore` | Excludes `bin/`, `obj/`, `.git/`, docs, specs |
 | 1.2 | Create `Dockerfile` at repo root | `Dockerfile` | Multi-stage build compiles and produces image |
 | 1.3 | Create `appsettings.Docker.json` | `src/FinWise.McpServer/appsettings.Docker.json` | Kestrel binds `0.0.0.0:5000`, Redis/CosmosDB point to container hostnames |
-| 1.4 | Verify image builds | — | `docker build -t finwise-mcp-server -f src/FinWise.McpServer/Dockerfile .` succeeds |
-| 1.5 | Verify image runs standalone | — | `docker run --rm -e AZURE_OPENAI_ENDPOINT=... finwise-mcp-server` starts and logs "FinWise MCP Server ready" |
+| 1.4 | Verify image builds | — | `docker build -t finwise-mcp .` succeeds |
+| 1.5 | Verify image runs standalone | — | `docker run --rm -e AZURE_OPENAI_ENDPOINT=... finwise-mcp` starts and logs "FinWise MCP Server ready" |
 
 ### Phase 2: Docker Compose Integration
 
@@ -434,7 +411,7 @@ Tests that validate concerns **only exercisable** when running against a contain
 |------|------|-------|-------------------|
 | 2.1 | Create `.env.template` | `.env.template` | Documents all required/optional env vars |
 | 2.2 | Add `.env` to `.gitignore` | `.gitignore` | `.env` not tracked |
-| 2.3 | Create `docker-compose.infra.yml` and update `docker-compose.yml` with `include:` pattern | `docker-compose.infra.yml`, `docker-compose.yml` | Infrastructure compose defines `finwise-redis` + `finwise-cosmosdb-emulator`; full compose uses `include:` and adds `finwise-mcp-server` service with depends_on, healthcheck, port mapping |
+| 2.3 | Add `finwise-mcp` service to `docker-compose.yml` | `docker-compose.yml` | Service definition with depends_on, healthcheck, port mapping |
 | 2.4 | Verify full stack startup | — | `docker compose up -d` starts all 3 services, `docker compose ps` shows all healthy |
 | 2.5 | Verify MCP handshake through container | — | `curl -X POST http://localhost:5000/mcp` with initialize payload returns session ID |
 
@@ -504,7 +481,7 @@ Tests that validate concerns **only exercisable** when running against a contain
   │  ║         DOCKER NETWORK (bridge)              ║  │
   │  ║                                             ║  │
   │  ║  ┌───────────────────────────────────────┐  ║  │
-  │  ║  │       finwise-mcp-server                 │  ║  │
+  │  ║  │          finwise-mcp                     │  ║  │
   │  ║  │  ┌─────────────────────────────────┐  │  ║  │
   │  ║  │  │ ASP.NET Core + MCP Server         │  │  ║  │
   │  ║  │  │ Kestrel → 0.0.0.0:5000            │  │  ║  │
@@ -516,12 +493,11 @@ Tests that validate concerns **only exercisable** when running against a contain
   │  ║           │ Docker DNS              │           ║  │
   │  ║           ▼                          ▼           ║  │
   │  ║  ┌───────────────┐  ┌────────────────────┐  ║  │
-  │  ║  │ finwise-redis │  │ finwise-cosmosdb-  │  ║  │
-  │  ║  │  ───────────  │  │   emulator         │  ║  │
-  │  ║  │  Redis 7.4    │  │ ──────────────── │  ║  │
-  │  ║  │  Alpine      │  │ Azure CosmosDB     │  ║  │
-  │  ║  │  :6379       │  │  Emulator (Linux)  │  ║  │
-  │  ║  │             │  │  :8081 (HTTPS)     │  ║  │
+  │  ║  │     redis     │  │ cosmosdb-emulator  │  ║  │
+  │  ║  │  ───────────  │  │ ──────────────── │  ║  │
+  │  ║  │  Redis 7.4    │  │ Azure CosmosDB     │  ║  │
+  │  ║  │  Alpine      │  │  Emulator (Linux)  │  ║  │
+  │  ║  │  :6379       │  │  :8081 (HTTPS)     │  ║  │
   │  ║  │             │  │  AllowInsecureTls  │  ║  │
   │  ║  │  ┌─────────┐ │  │  ┌──────────────┐ │  ║  │
   │  ║  │  │ VOL:    │ │  │  │ VOL:         │ │  ║  │
@@ -547,12 +523,12 @@ Tests that validate concerns **only exercisable** when running against a contain
 
 | From → To | Hostname | Port | Protocol | Config Source |
 |-----------|----------|------|----------|---------------|
-| Host → finwise-mcp-server | `localhost` | `5000:5000` | HTTP | `docker-compose.yml` port mapping |
-| Host → finwise-redis | `localhost` | `6379:6379` | Redis | `docker-compose.infra.yml` port mapping (dev tools) |
-| Host → finwise-cosmosdb-emulator | `localhost` | `8081:8081` | HTTPS | `docker-compose.infra.yml` port mapping (Data Explorer / dev tools) |
-| finwise-mcp-server → finwise-redis | `finwise-redis` | `6379` | Redis | `appsettings.Docker.json` |
-| finwise-mcp-server → finwise-cosmosdb-emulator | `finwise-cosmosdb-emulator` | `8081` | HTTPS (insecure TLS) | `appsettings.Docker.json` |
-| finwise-mcp-server → Azure OpenAI | External URL | `443` | HTTPS | `.env` → `AZURE_OPENAI_ENDPOINT` |
+| Host → finwise-mcp | `localhost` | `5000:5000` | HTTP | `docker-compose.yml` port mapping |
+| Host → redis | `localhost` | `6379:6379` | Redis | `docker-compose.yml` port mapping (dev tools) |
+| Host → cosmosdb-emulator | `localhost` | `8081:8081` | HTTPS | `docker-compose.yml` port mapping (Data Explorer / dev tools) |
+| finwise-mcp → redis | `redis` | `6379` | Redis | `appsettings.Docker.json` |
+| finwise-mcp → cosmosdb-emulator | `cosmosdb-emulator` | `8081` | HTTPS (insecure TLS) | `appsettings.Docker.json` |
+| finwise-mcp → Azure OpenAI | External URL | `443` | HTTPS | `.env` → `AZURE_OPENAI_ENDPOINT` |
 
 ### 7.3 Docker Image Build Pipeline
 
@@ -561,6 +537,7 @@ Tests that validate concerns **only exercisable** when running against a contain
    │  Stage 1: BUILD  (sdk:10.0 ~ 900 MB)           │
    │                                                 │
    │  COPY ┌───────────────────────────────────┐  │
+   │       │ FinWise.slnx                        │  │
    │       │ Directory.Build.props               │  │
    │       │ Directory.Packages.props             │  │
    │       │ FinWise.McpServer.csproj             │  │
@@ -610,15 +587,14 @@ Tests that validate concerns **only exercisable** when running against a contain
   docker-compose.yml                appsettings.Docker.json
   ────────────────────                ────────────────────────
   environment:                      Kestrel: 0.0.0.0:5000  ← only
-    - AZURE_OPENAI_*=${...}         Redis:   finwise-redis    host
-    - ASPNETCORE_ENVIRONMENT=         :6379                  changes
-        Docker                      CosmosDb: finwise-
-                                      cosmosdb-emulator:8081
+    - AZURE_OPENAI_*=${...}         Redis:   redis:6379       host
+    - ASPNETCORE_ENVIRONMENT=       CosmosDb: cosmosdb-       changes
+        Docker                        emulator:8081
            │                                   │
            └───────────┬───────────────┘
                        ▼
               ┌─────────────────────┐
-              │  finwise-mcp-server   │
+              │  finwise-mcp         │
               │  container            │
               │                       │
               │  ENV vars → Azure AI  │
@@ -814,7 +790,7 @@ The CosmosDB Linux emulator reports endpoint addresses in its account metadata (
 
 **The fix** — two-part solution:
 
-1. **Remove** `AZURE_COSMOS_EMULATOR_IP_ADDRESS_OVERRIDE` entirely from the CosmosDB emulator service definition in `docker-compose.infra.yml` — do NOT set it to `127.0.0.1` or `0.0.0.0`.
+1. **Remove** `AZURE_COSMOS_EMULATOR_IP_ADDRESS_OVERRIDE` entirely from `docker-compose.yml` — do NOT set it to `127.0.0.1` or `0.0.0.0`.
 2. **Add** `CosmosClientOptions.LimitToEndpoint = true` in application code when configuring for the emulator.
 
 `LimitToEndpoint = true` sets `EnableEndpointDiscovery = false` internally — the SDK only uses the endpoint URL from the connection string, ignoring all metadata addresses. This is a GA property in Azure.Cosmos SDK, not a workaround or bug. It works correctly with `ConnectionMode.Gateway`.
@@ -891,7 +867,7 @@ The combination of removing `IP_ADDRESS_OVERRIDE` + `LimitToEndpoint = true` ena
 | Scenario | Connection string endpoint | Why it works |
 |----------|---------------------------|-------------|
 | **.NET process on host** | `https://localhost:8081/` | Port mapping routes to emulator; `LimitToEndpoint` ignores Docker-internal IP in metadata |
-| **Container on Docker network** | `https://finwise-cosmosdb-emulator:8081/` | Docker DNS resolves service name; `LimitToEndpoint` ignores metadata addresses |
+| **Container on Docker network** | `https://cosmosdb-emulator:8081/` | Docker DNS resolves service name; `LimitToEndpoint` ignores metadata addresses |
 
 This dual-access pattern means developers can run the emulator in Docker and connect to it from both the host (for local debugging with `dotnet run`) and from other containers (for the full `docker compose` stack) without any configuration changes to the emulator.
 
@@ -901,16 +877,13 @@ This dual-access pattern means developers can run the emulator in Docker and con
 
 ```powershell
 # Build image only
-docker build -t finwise-mcp-server -f src/FinWise.McpServer/Dockerfile .
+docker build -t finwise-mcp .
 
 # Start full stack (build + run)
 docker compose up -d --build
 
-# Start infrastructure only (for local dotnet run development)
-docker compose -f docker-compose.infra.yml up -d
-
 # View logs
-docker compose logs -f finwise-mcp-server
+docker compose logs -f finwise-mcp
 
 # Check health
 docker compose ps
@@ -918,11 +891,8 @@ docker compose ps
 # Run container tests
 dotnet test tests/FinWise.McpServer.ContainerTests/
 
-# Stop everything (full stack)
+# Stop everything
 docker compose down
-
-# Stop infrastructure only
-docker compose -f docker-compose.infra.yml down
 
 # Stop and remove volumes (clean slate)
 docker compose down -v

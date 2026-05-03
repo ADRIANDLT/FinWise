@@ -21,8 +21,15 @@ public static class UserProfileStoreFactory
     /// </summary>
     public static IUserProfileStore CreateProfileStore(IConfiguration configuration)
     {
+        if (IsForceInMemoryDataEnabled(configuration))
+        {
+            Log.Information("ForceInMemoryData is enabled — using in-memory user profile store");
+            return new InMemoryUserProfileStore();
+        }
+
         var cosmosDbOptions = new CosmosDbOptions();
         configuration.GetSection(CosmosDbOptions.SectionName).Bind(cosmosDbOptions);
+        ApplyEnvironmentOverrides(cosmosDbOptions);
 
         if (cosmosDbOptions.Enabled)
         {
@@ -55,5 +62,29 @@ public static class UserProfileStoreFactory
 
         Log.Information("Using in-memory user profile store");
         return new InMemoryUserProfileStore();
+    }
+
+    private static void ApplyEnvironmentOverrides(CosmosDbOptions options)
+    {
+        if (Environment.GetEnvironmentVariable("FINWISE_COSMOSDB_ENABLED") is { Length: > 0 } enabled)
+            options.Enabled = string.Equals(enabled, "true", StringComparison.OrdinalIgnoreCase);
+        if (Environment.GetEnvironmentVariable("FINWISE_COSMOSDB_ENDPOINT") is { Length: > 0 } endpoint)
+            options.Endpoint = endpoint;
+        if (Environment.GetEnvironmentVariable("FINWISE_COSMOSDB_KEY") is { Length: > 0 } key)
+            options.Key = key;
+        if (Environment.GetEnvironmentVariable("FINWISE_COSMOSDB_DATABASE_NAME") is { Length: > 0 } dbName)
+            options.DatabaseName = dbName;
+        if (Environment.GetEnvironmentVariable("FINWISE_COSMOSDB_CONTAINER_NAME") is { Length: > 0 } containerName)
+            options.ContainerName = containerName;
+        if (Environment.GetEnvironmentVariable("FINWISE_COSMOSDB_ALLOW_INSECURE_TLS") is { Length: > 0 } allowInsecure)
+            options.AllowInsecureTls = string.Equals(allowInsecure, "true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsForceInMemoryDataEnabled(IConfiguration configuration)
+    {
+        var inMemory = configuration.GetValue<bool>("ForceInMemoryData");
+        if (Environment.GetEnvironmentVariable("FINWISE_FORCE_IN_MEMORY_DATA") is { Length: > 0 } envValue)
+            inMemory = string.Equals(envValue, "true", StringComparison.OrdinalIgnoreCase);
+        return inMemory;
     }
 }

@@ -6,6 +6,7 @@ using Xunit;
 
 namespace FinWise.MultiAgentWorkflow.UnitTests;
 
+[Trait("Category", "Unit")]
 public class StockSpecializedAgentFactoryTests
 {
     private const string ValidAgentName = "stock-data-agent";

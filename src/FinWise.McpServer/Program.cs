@@ -1,6 +1,6 @@
+using System.Reflection;
 using FinWise.McpServer.Infrastructure.AgentSessionStorage;
 using FinWise.McpServer.Infrastructure.AzureAIFoundry;
-using FinWise.McpServer.Infrastructure.AzureOpenAI;
 using FinWise.McpServer.Infrastructure.Logging;
 using FinWise.McpServer.Infrastructure.McpSession.Redis;
 using FinWise.McpServer.Infrastructure.UserProfileStorage;
@@ -23,7 +23,7 @@ try
     Log.Information("Starting FinWise MCP Server");
 
     // Initialize external dependencies via infrastructure factories
-    var chatClient = AzureOpenAIChatClientFactory.CreateChatClient();
+    var chatClient = AzureAIFoundryChatClientFactory.CreateChatClient();
 
     var configuration = new ConfigurationBuilder()
         .SetBasePath(AppContext.BaseDirectory)
@@ -54,13 +54,18 @@ try
             new RedisSessionMigrationHandler(redis, TimeSpan.FromMinutes(redisOptions.SessionTtlMinutes)));
     }
 
+    var serverVersion = Assembly.GetEntryAssembly()
+        ?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+        ?.InformationalVersion.Split('+')[0]
+        ?? "unknown";
+
     builder.Services
         .AddMcpServer(options =>
         {
             options.ServerInfo = new()
             {
                 Name = "FinWise MCP Server",
-                Version = "1.0.0"
+                Version = serverVersion
             };
         })
         .WithHttpTransport(httpOptions =>

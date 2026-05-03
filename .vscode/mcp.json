@@ -6,9 +6,23 @@
       "id": "perplexity-key",
       "description": "Perplexity API Key",
       "password": true
+    },
+    {
+      "type": "promptString",
+      "id": "context7-key",
+      "description": "Context7 API Key",
+      "password": true
     }
   ],
   "servers": {
+    //"FinWise-MCP-Server-Local": {
+    //  "type": "http",
+    //  "url": "http://localhost:5000/mcp"
+    //},
+    "FinWise-MCP-Server-Azure": {
+      "type": "http",
+      "url": "https://finwise-staging-mcp-server.wonderfulflower-56d1f5e1.westeurope.azurecontainerapps.io/mcp"
+    },
     "github": {
       "url": "https://api.githubcopilot.com/mcp",
       "type": "http"
@@ -32,9 +46,12 @@
       "type": "http",
       "url": "https://learn.microsoft.com/api/mcp"
     },
-    "FinWise-MCP-Server": {
+    "context7": {
       "type": "http",
-      "url": "http://localhost:5000/mcp"
+      "url": "https://mcp.context7.com/mcp",
+      "headers": {
+        "CONTEXT7_API_KEY": "${input:context7-key}"
+      }
     }
   }
 }

@@ -9,6 +9,7 @@ using Xunit;
 
 namespace FinWise.McpServer.UnitTests;
 
+[Trait("Category", "Unit")]
 public class RedisSessionMigrationHandlerTests
 {
     private readonly Mock<IConnectionMultiplexer> _redisMock = new();

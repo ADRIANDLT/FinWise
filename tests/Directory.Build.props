@@ -1,0 +1,9 @@
+<Project>
+  <!-- Inherit root Directory.Build.props -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup>
+    <!-- Default .runsettings for all test projects. Override per-run: dotnet test -s test.docker-local.runsettings -->
+    <RunSettingsFilePath Condition="'$(RunSettingsFilePath)' == ''">$(MSBuildThisFileDirectory)..\test.runsettings</RunSettingsFilePath>
+  </PropertyGroup>
+</Project>

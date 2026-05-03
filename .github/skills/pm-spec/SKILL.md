@@ -30,10 +30,10 @@ This workflow is powered by four modular skills. Load each skill by reading its 
 
 | Phase | Skill | Path | Purpose |
 |-------|-------|------|---------|
-| 1 | Context Gathering | `.github/skills/context-gathering/SKILL.md` | Gather feature context, discovery questions, engineering opt-in |
-| 2 | Approach Selection | `.github/skills/approach-selection/SKILL.md` | Feature Spec vs SpecKit decision, announcement |
-| 3 | Spec Writing | `.github/skills/spec-writing/SKILL.md` | Generate the specification following templates |
-| 4 | Spec Critique | `.github/skills/spec-critique/SKILL.md` | Review for completeness, clarity, consistency |
+| 1 | Context Gathering | `.github/skills/pm-context-gathering/SKILL.md` | Gather feature context, discovery questions, engineering opt-in |
+| 2 | Approach Selection | `.github/skills/pm-approach-selection/SKILL.md` | Feature Spec vs SpecKit decision, announcement |
+| 3 | Spec Writing | `.github/skills/pm-spec-writing/SKILL.md` | Generate the specification following templates |
+| 4 | Spec Critique | `.github/skills/pm-spec-critique/SKILL.md` | Review for completeness, clarity, consistency |
 
 ---
 
@@ -41,7 +41,7 @@ This workflow is powered by four modular skills. Load each skill by reading its 
 
 ### Phase 1: Context Gathering
 
-Load `.github/skills/context-gathering/SKILL.md` and follow its instructions.
+Load `.github/skills/pm-context-gathering/SKILL.md` and follow its instructions.
 
 Context sources (in priority order):
 1. `instructions.md` file (if provided by PM)
@@ -50,19 +50,19 @@ Context sources (in priority order):
 
 ### Phase 2: Approach Selection
 
-Load `.github/skills/approach-selection/SKILL.md` and follow its instructions.
+Load `.github/skills/pm-approach-selection/SKILL.md` and follow its instructions.
 
 Two approaches available:
 | Approach | When to Use | Template |
 |----------|-------------|----------|
-| **Feature Spec** (default) | All features — from focused enhancements to multi-component work | `templates/feature-spec-template.md` |
+| **Feature Spec** (default) | All features — from focused enhancements to multi-component work | `.github/skills/pm-spec/templates/feature-spec-template.md` |
 | **SpecKit** (rare) | Platform-level, 5+ components, 4+ teams, months+ | SpecKit structure |
 
-**Decision criteria details**: See `docs/decision-framework.md`
+**Decision criteria details**: See `.github/skills/pm-approach-selection/SKILL.md` for the full decision flowchart.
 
 ### Phase 3: Spec Generation
 
-Load `.github/skills/spec-writing/SKILL.md` and follow its instructions.
+Load `.github/skills/pm-spec-writing/SKILL.md` and follow its instructions.
 
 Provide:
 - All gathered context from Phase 1
@@ -74,7 +74,7 @@ Provide:
 
 > ⚠️ Before loading the critique skill, clear your writing persona. Evaluate the spec as if written by a different author.
 
-Load `.github/skills/spec-critique/SKILL.md` and follow its instructions.
+Load `.github/skills/pm-spec-critique/SKILL.md` and follow its instructions.
 
 ### Phase 5: Refinement
 
@@ -99,19 +99,7 @@ Save the generated specification to a location agreed with the PM. Default conve
 
 | Template | Purpose | Location |
 |----------|---------|----------|
-| Feature Spec Template | All features (default) | `templates/feature-spec-template.md` |
-| Decision Framework | Approach selection guidance | `docs/decision-framework.md` |
-
----
-
-## Example Specifications
-
-For reference on what good specs look like:
-
-| Example | Location |
-|---------|----------|
-| Dependency Update Bot | `examples/specs/automated-dependency-update-bot-spec.md` |
-| AI Code Review Agent | `examples/specs/ai-code-review-agent-spec.md` |
+| Feature Spec Template | All features (default) | `.github/skills/pm-spec/templates/feature-spec-template.md` |
 
 ---
 
