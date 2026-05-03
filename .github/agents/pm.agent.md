@@ -40,11 +40,11 @@ Load each skill by reading its SKILL.md file with the `readFile` tool. Follow th
 
 | Phase | Skill | Path |
 |-------|-------|------|
-| Context gathering | **Context Gathering** | `.github/skills/context-gathering/SKILL.md` |
-| Approach selection | **Approach Selection** | `.github/skills/approach-selection/SKILL.md` |
-| Spec generation | **Spec Writing** | `.github/skills/spec-writing/SKILL.md` |
-| Spec review | **Spec Critique** | `.github/skills/spec-critique/SKILL.md` |
-| Vision & Scope | **Vision & Scope** | `.github/skills/vision-scope/SKILL.md` |
+| Context gathering | **Context Gathering** | `.github/skills/pm-context-gathering/SKILL.md` |
+| Approach selection | **Approach Selection** | `.github/skills/pm-approach-selection/SKILL.md` |
+| Spec generation | **Spec Writing** | `.github/skills/pm-spec-writing/SKILL.md` |
+| Spec review | **Spec Critique** | `.github/skills/pm-spec-critique/SKILL.md` |
+| Vision & Scope | **Vision & Scope** | `.github/skills/pm-vision-scope/SKILL.md` |
 
 ### How to Load Skills
 
@@ -62,9 +62,9 @@ Load each skill by reading its SKILL.md file with the `readFile` tool. Follow th
 
 ### Phase 1: Context Gathering
 
-> ⛔ **ALWAYS LOAD THIS SKILL (Feature Spec workflow only).** Use `readFile` to load `.github/skills/context-gathering/SKILL.md` and follow its instructions completely — even if the PM provides a comprehensive `instructions.md`. This skill contains required steps (discovery validation, engineering sections opt-in) that cannot be skipped. Do NOT shortcut this phase by reading `instructions.md` yourself. For Vision & Scope documents, skip this phase entirely — the vision-scope skill handles its own context gathering.
+> ⛔ **ALWAYS LOAD THIS SKILL (Feature Spec workflow only).** Use `readFile` to load `.github/skills/pm-context-gathering/SKILL.md` and follow its instructions completely — even if the PM provides a comprehensive `instructions.md`. This skill contains required steps (discovery validation, engineering sections opt-in) that cannot be skipped. Do NOT shortcut this phase by reading `instructions.md` yourself. For Vision & Scope documents, skip this phase entirely — the vision-scope skill handles its own context gathering.
 
-Load `.github/skills/context-gathering/SKILL.md` and follow its instructions.
+Load `.github/skills/pm-context-gathering/SKILL.md` and follow its instructions.
 
 This skill handles:
 - Reading `instructions.md` if provided
@@ -74,7 +74,7 @@ This skill handles:
 
 ### Phase 2: Approach Selection
 
-Load `.github/skills/approach-selection/SKILL.md` and follow its instructions.
+Load `.github/skills/pm-approach-selection/SKILL.md` and follow its instructions.
 
 This skill handles:
 - Evaluating Feature Spec vs SpecKit criteria
@@ -83,7 +83,7 @@ This skill handles:
 
 ### Phase 3: Spec Generation
 
-Load `.github/skills/spec-writing/SKILL.md` and follow its instructions.
+Load `.github/skills/pm-spec-writing/SKILL.md` and follow its instructions.
 
 Provide the skill with:
 - All gathered context from Phase 1
@@ -94,7 +94,7 @@ Provide the skill with:
 
 ### Phase 4: Spec Review
 
-**Clear your writing persona first** (see Persona Switching above), then load `.github/skills/spec-critique/SKILL.md` and follow its instructions.
+**Clear your writing persona first** (see Persona Switching above), then load `.github/skills/pm-spec-critique/SKILL.md` and follow its instructions.
 
 Provide the skill with:
 - The generated spec from Phase 3
@@ -211,10 +211,10 @@ When the PM requests a Vision & Scope document (triggers: "create a vision doc",
 
 **Workflow lock:** Once a workflow is selected (Feature Spec or Vision & Scope), stay on it for the entire session. Do NOT mix skills from both workflows.
 
-1. Load `.github/skills/vision-scope/SKILL.md` and follow its instructions completely
+1. Load `.github/skills/pm-vision-scope/SKILL.md` and follow its instructions completely
 2. The skill handles context gathering, document generation, review, and refinement as a self-contained workflow
 3. Do NOT load the spec-writing or spec-critique skills for Vision & Scope — the vision-scope skill contains its own writing and review guidance
-4. Templates: `templates/vision-scope-template.md` (output) and `templates/vision-scope-instructions-template.md` (instructions input)
+4. Templates: `.github/skills/pm-spec/templates/vision-scope-template.md` (output) and `.github/skills/pm-spec/templates/vision-scope-instructions-template.md` (instructions input)
 5. Default output location: `my-specs/[initiative-name]-vision-scope.md`
 
 **File routing:**

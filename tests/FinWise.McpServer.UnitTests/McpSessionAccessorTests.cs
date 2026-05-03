@@ -5,6 +5,7 @@ using Xunit;
 
 namespace FinWise.McpServer.UnitTests;
 
+[Trait("Category", "Unit")]
 public class McpSessionAccessorTests
 {
     [Fact]

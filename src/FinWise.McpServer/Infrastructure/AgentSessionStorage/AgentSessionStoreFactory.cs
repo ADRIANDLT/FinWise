@@ -21,8 +21,15 @@ public static class AgentSessionStoreFactory
     public static async Task<(AgentSessionStore SessionStore, IConnectionMultiplexer? Redis, RedisOptions RedisOptions)> CreateSessionStoreAsync(
         IConfiguration configuration)
     {
+        if (IsForceInMemoryDataEnabled(configuration))
+        {
+            Log.Information("ForceInMemoryData is enabled — using in-memory agent session store");
+            return (new InMemoryAgentSessionStore(), null, new RedisOptions());
+        }
+
         var redisOptions = new RedisOptions();
         configuration.GetSection(RedisOptions.SectionName).Bind(redisOptions);
+        ApplyEnvironmentOverrides(redisOptions);
 
         if (redisOptions.Enabled)
         {
@@ -36,5 +43,23 @@ public static class AgentSessionStoreFactory
 
         Log.Information("Using in-memory agent session store");
         return (new InMemoryAgentSessionStore(), null, redisOptions);
+    }
+
+    private static void ApplyEnvironmentOverrides(RedisOptions options)
+    {
+        if (Environment.GetEnvironmentVariable("FINWISE_REDIS_ENABLED") is { Length: > 0 } enabled)
+            options.Enabled = string.Equals(enabled, "true", StringComparison.OrdinalIgnoreCase);
+        if (Environment.GetEnvironmentVariable("FINWISE_REDIS_CONNECTION_STRING") is { Length: > 0 } connStr)
+            options.ConnectionString = connStr;
+        if (Environment.GetEnvironmentVariable("FINWISE_REDIS_SESSION_TTL_MINUTES") is { Length: > 0 } ttl && int.TryParse(ttl, out var ttlMinutes))
+            options.SessionTtlMinutes = ttlMinutes;
+    }
+
+    private static bool IsForceInMemoryDataEnabled(IConfiguration configuration)
+    {
+        var inMemory = configuration.GetValue<bool>("ForceInMemoryData");
+        if (Environment.GetEnvironmentVariable("FINWISE_FORCE_IN_MEMORY_DATA") is { Length: > 0 } envValue)
+            inMemory = string.Equals(envValue, "true", StringComparison.OrdinalIgnoreCase);
+        return inMemory;
     }
 }

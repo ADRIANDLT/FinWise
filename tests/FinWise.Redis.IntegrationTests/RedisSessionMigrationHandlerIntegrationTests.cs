@@ -17,7 +17,8 @@ namespace FinWise.Redis.IntegrationTests;
 [Trait("Category", "Integration")]
 public class RedisSessionMigrationHandlerIntegrationTests : IAsyncLifetime
 {
-    private const string RedisConnection = "localhost:6379";
+    private static readonly string RedisConnection =
+        Environment.GetEnvironmentVariable("FINWISE_REDIS_CONNECTION_STRING") ?? "localhost:6379";
 
     private IConnectionMultiplexer? _redis;
     private RedisSessionMigrationHandler? _handler;
@@ -30,8 +31,9 @@ public class RedisSessionMigrationHandlerIntegrationTests : IAsyncLifetime
     {
         try
         {
+            var connectTimeout = RedisConnection.Contains(".redis.azure.net") ? 30000 : 3000;
             _redis = await ConnectionMultiplexer.ConnectAsync(
-                $"{RedisConnection},connectTimeout=3000,abortConnect=false");
+                $"{RedisConnection},connectTimeout={connectTimeout},abortConnect=false");
 
             var db = _redis.GetDatabase();
             await db.PingAsync();
@@ -136,9 +138,10 @@ public class RedisSessionMigrationHandlerIntegrationTests : IAsyncLifetime
 
         var ttlAfter = await db.KeyTimeToLiveAsync(key);
         ttlAfter.Should().NotBeNull();
-        // After refresh, TTL should be >= the TTL before the delay
-        // (it was reset to 60 min, while before it had ~60 min minus 2 sec)
-        ttlAfter!.Value.Should().BeGreaterThanOrEqualTo(ttlBefore!.Value);
+        // After refresh, TTL should be approximately >= the TTL before the delay.
+        // Allow 1-second tolerance for network latency (Azure Redis ~50ms round-trip
+        // can cause the TTL to tick down slightly between refresh and read).
+        ttlAfter!.Value.Should().BeGreaterThanOrEqualTo(ttlBefore!.Value - TimeSpan.FromSeconds(1));
     }
 
     [SkippableFact]

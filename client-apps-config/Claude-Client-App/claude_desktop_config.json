@@ -1,0 +1,21 @@
+{
+    "mcpServers": {
+        "FinWise-MCP-Server-Azure": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "mcp-remote",
+                "https://finwise-mcp-server-container-app.whitesky-2a351661.eastus2.azurecontainerapps.io/mcp"
+            ]
+        },
+        "DISABLED-FinWise-MCP-Server-Local": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "mcp-remote",
+                "http://localhost:5000/mcp",
+                "--allow-http"
+            ]
+        }
+    }
+}

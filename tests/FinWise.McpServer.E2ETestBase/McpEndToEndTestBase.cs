@@ -144,35 +144,110 @@ public abstract class McpEndToEndTestBase : IDisposable
         throw new InvalidOperationException("MCP server did not return a session ID");
     }
 
-    protected async Task SetupTestProfile()
+    protected async Task<string> SetupTestProfile(string? sessionId = null)
     {
-        Output.WriteLine("=== SETTING UP TEST PROFILE ===");
-
-        await CallFinancialAdviceTool("Please, give me personalized financial advice");
-        await CallFinancialAdviceTool("delatorre@outlook.com");
-        await CallFinancialAdviceTool("Moderate");
-        await CallFinancialAdviceTool("Increase profit");
-        await CallFinancialAdviceTool("Long-term");
-
-        Output.WriteLine("Test profile setup completed");
+        string email = $"test-{Guid.NewGuid().ToString("N")[..8]}@example.com";
+        await SetupTestProfileWithEmail(email, sessionId);
+        return email;
     }
 
-    protected async Task SetupTestProfileWithEmail(string email, string? sessionId = null)
+    protected async Task<string> SetupTestProfileWithEmail(string email, string? sessionId = null,
+        string riskTolerance = "Moderate", string investmentGoals = "Increase profit", string timeframe = "Long-term")
     {
         Output.WriteLine($"=== SETTING UP TEST PROFILE ({email}) ===");
 
-        await CallFinancialAdviceTool("Please, give me personalized financial advice", sessionId);
-        await CallFinancialAdviceTool(email, sessionId);
-        await CallFinancialAdviceTool("Moderate", sessionId);
-        await CallFinancialAdviceTool("Increase profit", sessionId);
-        await CallFinancialAdviceTool("Long-term", sessionId);
+        var r1 = await CallFinancialAdviceTool("Please, give me personalized financial advice", sessionId);
+        Output.WriteLine($"  Setup step 1: {TruncateForLog(r1)}");
 
-        Output.WriteLine("Test profile setup completed");
+        var r2 = await CallFinancialAdviceTool(email, sessionId);
+        Output.WriteLine($"  Setup step 2: {TruncateForLog(r2)}");
+        ThrowIfTransientProfileStepResponse(r2, "2 (email)");
+        if (IsProfileCompleteResponse(r2, email)) { Output.WriteLine("Test profile setup completed (profile already existed)"); return r2; }
+
+        var r3 = await CallFinancialAdviceTool(riskTolerance, sessionId);
+        Output.WriteLine($"  Setup step 3: {TruncateForLog(r3)}");
+        ThrowIfTransientProfileStepResponse(r3, "3 (risk tolerance)");
+        if (IsProfileCompleteResponse(r3, email)) { Output.WriteLine("Test profile setup completed"); return r3; }
+
+        var r4 = await CallFinancialAdviceTool(investmentGoals, sessionId);
+        Output.WriteLine($"  Setup step 4: {TruncateForLog(r4)}");
+        ThrowIfTransientProfileStepResponse(r4, "4 (investment goals)");
+        if (IsProfileCompleteResponse(r4, email)) { Output.WriteLine("Test profile setup completed"); return r4; }
+
+        var r5 = await CallFinancialAdviceTool(timeframe, sessionId);
+        Output.WriteLine($"  Setup step 5: {TruncateForLog(r5)}");
+        ThrowIfTransientProfileStepResponse(r5, "5 (timeframe)");
+        if (IsProfileCompleteResponse(r5, email)) { Output.WriteLine("Test profile setup completed"); return r5; }
+
+        // Fallback: make one more call to trigger the PROFILE_READY marker
+        Output.WriteLine("  No profile completion found, making fallback call...");
+        var fallback = await CallFinancialAdviceTool("Show me my investment profile", sessionId);
+        Output.WriteLine($"  Fallback: {TruncateForLog(fallback)}");
+        ThrowIfTransientProfileStepResponse(fallback, "fallback");
+        if (IsProfileCompleteResponse(fallback, email)) { Output.WriteLine("Test profile setup completed"); return fallback; }
+
+        throw new InvalidOperationException($"Profile setup failed: no step produced a profile completion response for {email}");
     }
+
+    protected const string TransientErrorResponse = "I apologize, but I encountered an error processing your request. Please try again.";
+    private const int MaxAttempts = 6;
 
     protected async Task<string> CallFinancialAdviceTool(string query, string? sessionId = null)
     {
-        return await CallMcpToolAsync("run_finwise_workflow", new { query }, sessionId);
+        var lastResult = TransientErrorResponse;
+
+        for (int attempt = 1; attempt <= MaxAttempts; attempt++)
+        {
+            lastResult = await CallMcpToolAsync("run_finwise_workflow", new { query }, sessionId);
+            if (!IsTransientError(lastResult) || attempt == MaxAttempts)
+                return lastResult;
+
+            Logger.LogWarning("Transient error on attempt {Attempt}/{Max}, retrying in {Delay}s...",
+                attempt, MaxAttempts, attempt * 4);
+            await Task.Delay(TimeSpan.FromSeconds(attempt * 4));
+        }
+
+        return lastResult;
+    }
+
+    private void ThrowIfTransientProfileStepResponse(string response, string step)
+    {
+        if (!IsTransientError(response))
+            return;
+
+        throw new InvalidOperationException(
+            $"Profile setup failed at step {step}: transient error persisted after retry budget. Response: {TruncateForLog(response)}");
+    }
+
+    protected static bool IsTransientError(string response)
+    {
+        return (response.Contains("apologize", StringComparison.OrdinalIgnoreCase) &&
+                response.Contains("error", StringComparison.OrdinalIgnoreCase)) ||
+               (response.Contains("processing", StringComparison.OrdinalIgnoreCase) &&
+                response.Contains("try again", StringComparison.OrdinalIgnoreCase)) ||
+               response == TransientErrorResponse;
+    }
+
+    /// <summary>
+    /// Detects profile completion responses — either the structured PROFILE_READY marker
+    /// or a conversational response that confirms profile data (LLM non-determinism).
+    /// </summary>
+    protected static bool IsProfileCompleteResponse(string response, string email)
+    {
+        if (response.Contains("PROFILE_READY:", global::System.StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var lower = response.ToLowerInvariant();
+        bool hasEmail = response.Contains(email, global::System.StringComparison.OrdinalIgnoreCase);
+        bool confirmsCompletion = lower.Contains("profile is now complete") ||
+                                  lower.Contains("profile has been created") ||
+                                  lower.Contains("here are your details") ||
+                                  lower.Contains("profile is set up") ||
+                                  lower.Contains("profile is ready");
+        bool hasProfileFields = (lower.Contains("risk") || lower.Contains("tolerance")) &&
+                                (lower.Contains("goal") || lower.Contains("timeframe") || lower.Contains("investment"));
+
+        return hasEmail && (confirmsCompletion || hasProfileFields);
     }
 
     protected async Task<string> CallResetSessionTool(string? sessionId = null)

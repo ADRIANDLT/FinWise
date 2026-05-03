@@ -42,7 +42,7 @@ dotnet test tests/FinWise.MultiAgentWorkflow.UnitTests/
 dotnet test tests/FinWise.McpServer.UnitTests/
 ```
 
-### Option A — Full Docker stack
+### Mode A — Full Docker stack
 
 > **Requires Docker Desktop 4.22+ / Docker Compose v2.20+** — the `include:` directive in `docker-compose.yml` is not supported by older versions.
 
@@ -52,7 +52,7 @@ docker compose up -d
 
 Starts CosmosDB emulator + Redis + FinWise MCP Server (port 5000).
 
-### Option B — Local .NET dev + Docker infrastructure
+### Mode B — Local .NET dev + Docker infrastructure
 
 ```powershell
 # Start only CosmosDB + Redis
@@ -62,7 +62,7 @@ docker compose -f docker-compose.infra.yml up -d
 dotnet run --project src/FinWise.McpServer/ --urls http://localhost:5000
 ```
 
-### Integration tests (require infrastructure from Option A or B + Azure env vars)
+### Integration tests (require infrastructure from Mode A or B + Azure env vars)
 
 ```powershell
 dotnet test tests/FinWise.McpServer.IntegrationTests/    # Server running + Azure OpenAI env vars
@@ -71,7 +71,7 @@ dotnet test tests/FinWise.Redis.IntegrationTests/        # Redis
 dotnet test tests/FinWise.StockAgent.IntegrationTests/   # Azure AI Foundry env vars
 ```
 
-### Container tests (require Option A — full Docker stack)
+### Container tests (require Mode A — full Docker stack)
 
 ```powershell
 docker compose up -d
@@ -90,7 +90,33 @@ dotnet test tests/FinWise.McpServer.ContainerTests/
 ### MUST NOT
 
 - Never commit secrets or credentials
+- Never commit `.env` files — only `.env.*.template` files are tracked in git.
+  `.gitignore` uses `*.env` + `.env.*` + `!.env.*.template` to enforce this.
 - Never bypass hub-and-spoke (no direct agent-to-agent calls)
+
+## Versioning
+
+Single source of truth: `Directory.Build.props` (`<FinWiseVersion>`). It propagates `<Version>` to all .NET projects automatically.
+
+Bump these four files together on every version change:
+
+| File | What to update | Why |
+|---|---|---|
+| `Directory.Build.props` | `<FinWiseVersion>` | Propagates `<Version>` to all .NET projects |
+| `src/FinWise.McpServer/Program.cs` | `ServerInfo.Version` literal | Reported to MCP clients on `initialize` |
+| `docker-compose.finwise.yml` | `image:` tag | Docker build + push tag |
+| `README.md` | Docker Hub image tag in Azure Container Apps section | Documentation displayed to users |
+
+### MUST NOT
+
+- Do not add `<Version>` elements to individual `.csproj` files — they would override the centralized `FinWiseVersion`.
+
+```powershell
+# After bumping the 4 files above (e.g., to 1.0.2):
+dotnet build FinWise.slnx
+docker compose build finwise-mcp-server
+docker push finwiseproject/finwise-mcp-server:1.0.2
+```
 
 ## Project-Specific Instructions
 

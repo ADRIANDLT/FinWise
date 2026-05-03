@@ -16,7 +16,8 @@ namespace FinWise.Redis.IntegrationTests;
 [Trait("Category", "Integration")]
 public class RedisAgentSessionStoreIntegrationTests : IAsyncLifetime
 {
-    private const string RedisConnection = "localhost:6379";
+    private static readonly string RedisConnection =
+        Environment.GetEnvironmentVariable("FINWISE_REDIS_CONNECTION_STRING") ?? "localhost:6379";
 
     private IConnectionMultiplexer? _redis;
     private RedisAgentSessionStore? _store;
@@ -29,8 +30,9 @@ public class RedisAgentSessionStoreIntegrationTests : IAsyncLifetime
     {
         try
         {
+            var connectTimeout = RedisConnection.Contains(".redis.azure.net", StringComparison.OrdinalIgnoreCase) ? 30000 : 3000;
             _redis = await ConnectionMultiplexer.ConnectAsync(
-                $"{RedisConnection},connectTimeout=3000,abortConnect=false");
+                $"{RedisConnection},connectTimeout={connectTimeout},abortConnect=false");
 
             // Verify connection is alive
             var db = _redis.GetDatabase();

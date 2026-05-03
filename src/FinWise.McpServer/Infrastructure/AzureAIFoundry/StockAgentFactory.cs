@@ -24,7 +24,7 @@ public static class StockAgentFactory
         var clientId = Environment.GetEnvironmentVariable("FINWISE_AZURE_CLIENT_ID");
         var clientSecret = Environment.GetEnvironmentVariable("FINWISE_AZURE_CLIENT_SECRET");
 
-        // Log env var status (without exposing secrets) — matches AzureOpenAIChatClientFactory pattern
+        // Log env var status (without exposing secrets) so missing config is diagnosable from logs
         Log.Information("STOCK_AGENT_PROJECT_ENDPOINT: {Status}", string.IsNullOrEmpty(endpoint) ? "NOT SET" : "SET");
         Log.Information("STOCK_AGENT_NAME: {Status}", string.IsNullOrEmpty(agentName) ? "NOT SET" : "SET");
         Log.Information("FINWISE_AZURE_TENANT_ID: {Status}", string.IsNullOrEmpty(tenantId) ? "NOT SET" : "SET");

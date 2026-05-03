@@ -33,8 +33,8 @@ Use the template corresponding to the selected approach:
 
 | Approach | Template |
 |----------|----------|
-| Feature Specification | `templates/feature-spec-template.md` |
-| SpecKit | SpecKit structure per `docs/github-speckit-guide.md` |
+| Feature Specification | `.github/skills/pm-spec/templates/feature-spec-template.md` |
+| SpecKit | SpecKit structure (see approach-selection skill for criteria) |
 
 **Read the full template before writing.** Follow its structure exactly — do not skip sections, reorder sections, or invent new sections unless the coordinator specifically instructs otherwise.
 

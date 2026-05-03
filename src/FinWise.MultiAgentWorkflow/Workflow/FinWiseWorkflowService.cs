@@ -242,6 +242,8 @@ public class FinWiseWorkflowService
         Log.Information("FinWise workflow initialized with {AgentCount} agents for session {AgentSessionId} (ProfileReady: {IsProfileReady})",
             availableAgents.Length + 1, agentSessionId, isProfileReady);
 
+        Log.Debug("Workflow Mermaid visualization:\n{MermaidDiagram}", workflow.ToMermaidString());
+
         return (orchestratorAgent, workflow);
     }
 

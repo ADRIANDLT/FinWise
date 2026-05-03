@@ -9,6 +9,7 @@ using Xunit;
 
 namespace FinWise.MultiAgentWorkflow.UnitTests;
 
+[Trait("Category", "Unit")]
 public class AgentSessionManagerTests
 {
     private readonly AgentSessionManager _manager;

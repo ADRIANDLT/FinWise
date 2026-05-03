@@ -6,7 +6,6 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <RunSettingsFilePath>$(MSBuildThisFileDirectory)..\..\test.runsettings</RunSettingsFilePath>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="coverlet.collector">
@@ -14,7 +13,6 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Azure.AI.Projects" />
-    <PackageReference Include="Azure.AI.Projects.OpenAI" />
     <PackageReference Include="Azure.Identity" />
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />

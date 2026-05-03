@@ -31,8 +31,8 @@ Vision & Scope documents sit **above** feature specifications in the documentati
 
 ```
 Vision & Scope Document (this skill)
-  └── Feature Spec 1 (pm-spec skill) — from Phase 1 scope
-  └── Feature Spec 2 (pm-spec skill) — from Phase 2 scope
+  └── Feature Spec 1 (PM agent workflow) — from Phase 1 scope
+  └── Feature Spec 2 (PM agent workflow) — from Phase 2 scope
   └── Feature Spec N ...
 ```
 
@@ -138,7 +138,7 @@ Generate the Vision & Scope document following the template.
 
 #### Template
 
-Use `templates/vision-scope-template.md`. **Read the full template before writing.** Follow its structure exactly — all 11 sections in order plus Revision History.
+Use `.github/skills/pm-spec/templates/vision-scope-template.md`. **Read the full template before writing.** Follow its structure exactly — all 11 sections in order plus Revision History.
 
 #### Writing Standards
 
@@ -304,7 +304,7 @@ When the document is approved:
 
 **Next Steps**:
 - Share with leadership and stakeholders for alignment
-- Use phased scope to drive Feature Specification creation (use the pm-spec skill)
+- Use phased scope to drive Feature Specification creation (use the PM agent's Feature Spec workflow)
 - Revisit quarterly or when strategic direction changes
 ```
 
@@ -314,8 +314,8 @@ When the document is approved:
 
 | Template | Purpose | Location |
 |----------|---------|----------|
-| Vision & Scope Document | The output document template | `templates/vision-scope-template.md` |
-| Vision & Scope Instructions | PM context input template | `templates/vision-scope-instructions-template.md` |
+| Vision & Scope Document | The output document template | `.github/skills/pm-spec/templates/vision-scope-template.md` |
+| Vision & Scope Instructions | PM context input template | `.github/skills/pm-spec/templates/vision-scope-instructions-template.md` |
 
 ---
 

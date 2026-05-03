@@ -1,6 +1,6 @@
 # FinWise.MultiAgentWorkflow
 
-Class library: multi-agent orchestration, session management, profile storage. Zero MCP dependencies. LLM-provider-agnostic (receives `IChatClient`).
+Class library: multi-agent orchestration, session management usage, profile storage usage. Zero MCP package/type dependencies. LLM-provider-agnostic (receives `IChatClient`).
 
 ## Technology
 
@@ -12,6 +12,8 @@ Packages centralized in `Directory.Packages.props`. Testing: xUnit, FluentAssert
 - Namespace = folder path
 - Sub-folder names must NOT match class names (C# namespace/type collision)
 - Hub-and-spoke handoffs — all agents route through Orchestrator
+- Any external infrastructure dependency (datastores, search/grounding, APIs, tools) must be accessed via workflow abstractions (interfaces/abstract classes); concrete adapters live in host/infrastructure and are injected via DI. Aligned to Domain-Driven Design patterns on ingrastructure dependency depends on the domain/workflow layer, not vice-versa.
+- If consuming an MCP tool for agent context/grounding, keep interface contracts and neutral DTOs in this workflow and implement MCP client/protocol mechanics in adapter/host infrastructure wired via DI to return plain domain data only
 - All profile fields free-form text — no validation/enum constraints
 - Agents are stateless — all state lives in `AgentSession`
 - TreatWarningsAsErrors — zero warnings
@@ -19,7 +21,7 @@ Packages centralized in `Directory.Packages.props`. Testing: xUnit, FluentAssert
 ## MUST NOT
 
 - Never reference MCP packages or types
-- Never call agents directly (always through Orchestrator)
+- Never call agents directly from another agent (always through Orchestrator)
 
 ## Folder Responsibilities
 

@@ -46,9 +46,10 @@ public class CosmosDbUserProfileStore : IUserProfileStore, IAsyncDisposable
             Log.Information("Initializing CosmosDB database '{Database}' and container '{Container}'",
                 _options.DatabaseName, _options.ContainerName);
 
+            // Do not specify throughput — Serverless accounts don't support it,
+            // and the emulator works fine without it.
             var database = await _client.CreateDatabaseIfNotExistsAsync(
-                id: _options.DatabaseName,
-                throughput: 400
+                id: _options.DatabaseName
             );
 
             _container = await database.Database.CreateContainerIfNotExistsAsync(

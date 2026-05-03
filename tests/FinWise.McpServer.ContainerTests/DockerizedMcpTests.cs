@@ -9,6 +9,7 @@ namespace FinWise.McpServer.ContainerTests;
 /// Re-exercises existing E2E MCP protocol scenarios against the Dockerized server.
 /// Proves the app works identically inside the container.
 /// </summary>
+[Trait("Category", "Container")]
 public class DockerizedMcpTests : McpEndToEndTestBase
 {
     public DockerizedMcpTests(ITestOutputHelper output) : base(output) { }
@@ -77,9 +78,10 @@ public class DockerizedMcpTests : McpEndToEndTestBase
 
         Output.WriteLine($"Container tools: {string.Join(", ", toolNames)}");
 
-        toolNames.Should().HaveCount(2);
+        toolNames.Should().HaveCount(3);
         toolNames.Should().Contain("run_finwise_workflow");
         toolNames.Should().Contain("reset_conversation");
+        toolNames.Should().Contain("get_storage_info");
     }
 
     [SkippableFact]
@@ -111,6 +113,6 @@ public class DockerizedMcpTests : McpEndToEndTestBase
         var followUp = await CallFinancialAdviceTool("Give me financial advice");
 
         followUp.ToLowerInvariant().Should().Contain("email",
-            because: "after reset, should ask for email again");
+            because: "after reset with unique email, should ask for email again");
     }
 }

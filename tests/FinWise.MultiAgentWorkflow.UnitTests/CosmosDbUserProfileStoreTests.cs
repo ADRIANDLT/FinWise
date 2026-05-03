@@ -14,6 +14,7 @@ namespace FinWise.MultiAgentWorkflow.UnitTests;
 /// Unit tests for CosmosDbUserProfileStore.
 /// Uses mocking to verify correct SDK interactions without requiring actual CosmosDB.
 /// </summary>
+[Trait("Category", "Unit")]
 public class CosmosDbUserProfileStoreTests
 {
     private readonly Mock<CosmosClient> _mockClient;

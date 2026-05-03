@@ -16,6 +16,7 @@ namespace FinWise.MultiAgentWorkflow.UnitTests;
 /// calls real LLM through IChatClient.CompleteAsync(). Mocking the chat client to throw lets us exercise
 /// the catch blocks, session ID management, and reset behavior.
 /// </summary>
+[Trait("Category", "Unit")]
 public class FinWiseWorkflowServiceTests
 {
     private readonly Mock<IChatClient> _mockChatClient;

@@ -9,6 +9,7 @@ namespace FinWise.McpServer.ContainerTests;
 /// <summary>
 /// Tests that validate Docker-specific concerns only exercisable against a containerized server.
 /// </summary>
+[Trait("Category", "Container")]
 public class DockerContainerSpecificTests : McpEndToEndTestBase
 {
     public DockerContainerSpecificTests(ITestOutputHelper output) : base(output) { }
@@ -48,17 +49,18 @@ public class DockerContainerSpecificTests : McpEndToEndTestBase
     }
 
     [SkippableFact]
-    public async Task Container_AzureOpenAIEnvVars_ShouldBeInjected()
+    public async Task Container_FoundryLlmEnvVars_ShouldBeInjected()
     {
         // Validates: .env → docker-compose → container env var injection chain
+        // for the Azure AI Foundry LLM (FINWISE_AZURE_AI_FOUNDRY_* + FINWISE_AZURE_* SP creds)
         await EnsureContainerRunning();
         await InitializeMcpSession();
 
         var response = await CallFinancialAdviceTool("Hello");
 
         response.Should().NotBeNullOrEmpty(
-            because: "Azure OpenAI env vars must be injected for the LLM to respond");
-        Output.WriteLine("Azure OpenAI env var injection: VERIFIED");
+            because: "Azure AI Foundry env vars must be injected for the LLM to respond");
+        Output.WriteLine("Azure AI Foundry LLM env var injection: VERIFIED");
     }
 
     [SkippableFact]

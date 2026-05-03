@@ -19,8 +19,10 @@ public class RedisOptions
 
     /// <summary>
     /// Redis connection string.
-    /// For local Docker: "localhost:6379"
-    /// For Azure Cache for Redis: "{name}.redis.cache.windows.net:6380,password={key},ssl=True,abortConnect=False"
+    /// For local Docker: "localhost:6379" or "finwise-redis:6379"
+    /// For Azure Managed Redis: "{name}.{region}.redis.azure.net:10000,password={key},ssl=False,abortConnect=False"
+    ///   ⚠️ ssl=False is required for Plaintext instances — StackExchange.Redis auto-enables SSL for *.redis.azure.net.
+    ///   Use ssl=True if clientProtocol is "Encrypted".
     /// </summary>
     public string ConnectionString { get; set; } = "localhost:6379";
 

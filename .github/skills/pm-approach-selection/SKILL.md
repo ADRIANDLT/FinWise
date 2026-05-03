@@ -84,7 +84,7 @@ After selecting the approach, produce this announcement:
 
 **Approach**: [Feature Spec | SpecKit]
 **Reasoning**: [Why this approach fits]
-**Template**: [templates/feature-spec-template.md | SpecKit structure]
+**Template**: [.github/skills/pm-spec/templates/feature-spec-template.md | SpecKit structure]
 **Estimated Time**: [30-60 min | 4-6 hours]
 
 Proceeding to spec generation.

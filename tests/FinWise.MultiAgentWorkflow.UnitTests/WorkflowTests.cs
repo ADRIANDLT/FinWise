@@ -10,6 +10,7 @@ using Xunit;
 
 namespace FinWise.MultiAgentWorkflow.UnitTests;
 
+[Trait("Category", "Unit")]
 public class WorkflowTests
 {
     [Fact]
@@ -58,7 +59,7 @@ public class WorkflowTests
     }
 
     // Note: Integration tests for ChatClientAgent workflow execution require:
-    // 1. Azure OpenAI environment variables configured
+    // 1. Azure AI Foundry environment variables configured (FINWISE_AZURE_AI_FOUNDRY_* + FINWISE_AZURE_* SP creds)
     // 2. Live LLM calls (not unit testable with mocks)
     // 3. Manual testing via Claude Desktop MCP integration
     //

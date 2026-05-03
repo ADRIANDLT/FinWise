@@ -10,6 +10,7 @@ using FinWise.MultiAgentWorkflow.Infrastructure.AgentSessionStores.Redis;
 
 namespace FinWise.MultiAgentWorkflow.UnitTests;
 
+[Trait("Category", "Unit")]
 public class RedisAgentSessionStoreTests
 {
     private readonly Mock<IConnectionMultiplexer> _redisMock = new();

@@ -2,6 +2,7 @@ using System.ComponentModel;
 using FinWise.McpServer.Infrastructure.McpSession;
 using FinWise.MultiAgentWorkflow.Workflow;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Server;
 using Serilog;
@@ -62,5 +63,55 @@ public static class FinWiseTools
         await workflowService.ResetSessionAsync(mcpSessionId);
 
         return "Conversation history cleared. User profiles are retained in the store.";
+    }
+
+    [McpServerTool(Name = "get_storage_info")]
+    [Description("Explains where FinWise stores data — which data concerns use in-memory structures and which use external databases (e.g., CosmosDB, Redis). Call when the user asks where their data is stored or what databases FinWise uses.")]
+    public static Task<string> GetStorageInfo(IServiceProvider serviceProvider)
+    {
+        var configuration = serviceProvider.GetRequiredService<IConfiguration>();
+
+        var forceInMemory = configuration.GetValue<bool>("ForceInMemoryData");
+        if (Environment.GetEnvironmentVariable("FINWISE_FORCE_IN_MEMORY_DATA") is { Length: > 0 } forceEnv)
+            forceInMemory = string.Equals(forceEnv, "true", StringComparison.OrdinalIgnoreCase);
+
+        if (forceInMemory)
+        {
+            return Task.FromResult(
+                """
+                FinWise Storage Configuration (all storage forced to in-memory — ForceInMemoryData=true):
+                • User Profiles: In-memory data store (ConcurrentDictionary)
+                • Agent Sessions (conversation state): In-memory data store (ConcurrentDictionary)
+                • MCP Session Migration: Disabled (only needed for multi-instance scale-out with Redis)
+                """);
+        }
+
+        var redisEnabled = configuration.GetValue<bool>("Redis:Enabled");
+        if (Environment.GetEnvironmentVariable("FINWISE_REDIS_ENABLED") is { Length: > 0 } redisEnv)
+            redisEnabled = string.Equals(redisEnv, "true", StringComparison.OrdinalIgnoreCase);
+
+        var cosmosDbEnabled = configuration.GetValue<bool>("CosmosDb:Enabled");
+        if (Environment.GetEnvironmentVariable("FINWISE_COSMOSDB_ENABLED") is { Length: > 0 } cosmosEnv)
+            cosmosDbEnabled = string.Equals(cosmosEnv, "true", StringComparison.OrdinalIgnoreCase);
+
+        var userProfiles = cosmosDbEnabled
+            ? "Azure CosmosDB (NoSQL document database)"
+            : "In-memory data store (ConcurrentDictionary)";
+
+        var agentSessions = redisEnabled
+            ? "Redis (fast key-value external persistent store)"
+            : "In-memory data store (ConcurrentDictionary)";
+
+        var mcpMigration = redisEnabled
+            ? "Redis (fast key-value external persistent store)"
+            : "Disabled (only needed for multi-instance scale-out with Redis)";
+
+        return Task.FromResult(
+            $"""
+            FinWise Storage Configuration:
+            • User Profiles: {userProfiles}
+            • Agent Sessions (conversation state): {agentSessions}
+            • MCP Session Migration: {mcpMigration}
+            """);
     }
 }
