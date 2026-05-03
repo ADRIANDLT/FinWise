@@ -1,0 +1,436 @@
+# FinWise CI Pipeline
+#
+# Controlled by FINWISE_FORCE_IN_MEMORY_DATA (GitHub Environment variable):
+#   false (default) = Full mode:  all tests with real databases
+#   true            = Fast mode:  unit + E2E only, in-memory stores
+#
+# Jobs:
+#   resolve-mode           — Reads mode from environment (runs in parallel with unit tests)
+#   build-and-unit-tests   — Fast feedback, no infrastructure (always runs); uploads build artifacts
+#   e2e-and-container-tests — MCP Server container E2E tests (always runs, adapts to mode)
+#   integration-tests      — CosmosDB + Redis via docker-compose.infra.yml (full mode only)
+#
+# Speed optimisations:
+#   - NuGet packages are cached in build-and-unit-tests (keyed on csproj + Directory.Packages.props)
+#   - Build outputs are uploaded as an artifact and reused by integration-tests and
+#     e2e-and-container-tests (--no-build), eliminating two full dotnet build executions
+#   - Docker image is built with Docker Buildx and the GitHub Actions layer cache, so
+#     only changed layers are rebuilt on subsequent runs
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  TEST_RUNSETTINGS: test.docker-local.runsettings
+  DOCKER_COMPOSE_MIN_VERSION: '2.24.0'
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Resolve test mode from FINWISE_FORCE_IN_MEMORY_DATA environment variable
+  # ---------------------------------------------------------------------------
+  resolve-mode:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    environment: finwise-ci-testing
+    outputs:
+      in_memory: ${{ steps.resolve.outputs.in_memory }}
+    steps:
+      - name: Resolve test mode
+        id: resolve
+        run: |
+          mode="${{ vars.FINWISE_FORCE_IN_MEMORY_DATA }}"
+          mode=$(echo "${mode:-false}" | tr '[:upper:]' '[:lower:]')
+          echo "in_memory=${mode}" >> $GITHUB_OUTPUT
+          if [ "$mode" = "true" ]; then
+            echo "::notice::CI mode: FAST (in-memory stores, integration tests skipped)"
+          else
+            echo "::notice::CI mode: FULL (real databases, all tests)"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Build + Unit Tests (no infrastructure)
+  # Uploads build artifacts for reuse by downstream jobs.
+  # ---------------------------------------------------------------------------
+  build-and-unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: dotnet restore FinWise.slnx
+
+      - name: Build
+        run: dotnet build FinWise.slnx --no-restore -c Release
+
+      - name: Unit tests — McpServer
+        run: >
+          dotnet test tests/FinWise.McpServer.UnitTests/
+          --no-build -c Release
+          --logger trx
+          --results-directory TestResults
+
+      - name: Unit tests — MultiAgentWorkflow
+        run: >
+          dotnet test tests/FinWise.MultiAgentWorkflow.UnitTests/
+          --no-build -c Release
+          --logger trx
+          --results-directory TestResults
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: '**/bin/Release/'
+          retention-days: 1
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: unit-test-results
+          path: TestResults/*.trx
+          if-no-files-found: ignore
+
+      - name: Test Report — Unit Tests
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        uses: dorny/test-reporter@v3
+        with:
+          name: Unit Tests
+          path: TestResults/*.trx
+          reporter: dotnet-trx
+
+  # ---------------------------------------------------------------------------
+  # E2E + Container Tests (adapts to mode)
+  # Reuses build artifacts from build-and-unit-tests.
+  # Docker image is built with BuildKit GHA layer cache.
+  # ---------------------------------------------------------------------------
+  e2e-and-container-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: [build-and-unit-tests, resolve-mode]
+    environment: finwise-ci-testing
+    env:
+      FINWISE_AZURE_AI_FOUNDRY_PROJECT_ENDPOINT: ${{ vars.FINWISE_AZURE_AI_FOUNDRY_PROJECT_ENDPOINT }}
+      FINWISE_AZURE_AI_FOUNDRY_LLM_DEPLOYMENT_NAME: ${{ vars.FINWISE_AZURE_AI_FOUNDRY_LLM_DEPLOYMENT_NAME }}
+      FINWISE_AZURE_TENANT_ID: ${{ vars.FINWISE_AZURE_TENANT_ID }}
+      FINWISE_AZURE_CLIENT_ID: ${{ vars.FINWISE_AZURE_CLIENT_ID }}
+      FINWISE_AZURE_CLIENT_SECRET: ${{ secrets.FINWISE_AZURE_CLIENT_SECRET }}
+      STOCK_AGENT_PROJECT_ENDPOINT: ${{ vars.STOCK_AGENT_PROJECT_ENDPOINT }}
+      STOCK_AGENT_NAME: ${{ vars.STOCK_AGENT_NAME }}
+      FINWISE_FORCE_IN_MEMORY_DATA: ${{ vars.FINWISE_FORCE_IN_MEMORY_DATA }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+
+      - name: Verify Docker Compose version
+        run: |
+          raw_version=$(docker compose version --short)
+          version="${raw_version#v}"
+          echo "Docker Compose version: $raw_version (normalized: $version)"
+          required="${{ env.DOCKER_COMPOSE_MIN_VERSION }}"
+          if [ "$(printf '%s\n' "$required" "$version" | sort -V | head -n1)" != "$required" ]; then
+            echo "::error::Docker Compose >= $required is required (found $raw_version)"
+            exit 1
+          fi
+
+      - name: Validate required secrets
+        run: |
+          missing=()
+          [ -z "$FINWISE_AZURE_AI_FOUNDRY_PROJECT_ENDPOINT" ] && missing+=("FINWISE_AZURE_AI_FOUNDRY_PROJECT_ENDPOINT")
+          [ -z "$FINWISE_AZURE_AI_FOUNDRY_LLM_DEPLOYMENT_NAME" ] && missing+=("FINWISE_AZURE_AI_FOUNDRY_LLM_DEPLOYMENT_NAME")
+          [ -z "$FINWISE_AZURE_TENANT_ID" ] && missing+=("FINWISE_AZURE_TENANT_ID")
+          [ -z "$FINWISE_AZURE_CLIENT_ID" ] && missing+=("FINWISE_AZURE_CLIENT_ID")
+          [ -z "$FINWISE_AZURE_CLIENT_SECRET" ] && missing+=("FINWISE_AZURE_CLIENT_SECRET")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required environment variables: ${missing[*]}"
+            echo "Configure the 'finwise-ci-testing' GitHub environment. See README.md."
+            exit 1
+          fi
+
+      - name: Generate .env for Docker Compose
+        run: |
+          # Dynamic values from GitHub environment (unquoted heredoc = shell expands $vars)
+          cat > .env <<EOF
+          # --- Azure AI Foundry ---
+          FINWISE_AZURE_AI_FOUNDRY_PROJECT_ENDPOINT=${FINWISE_AZURE_AI_FOUNDRY_PROJECT_ENDPOINT}
+          FINWISE_AZURE_AI_FOUNDRY_LLM_DEPLOYMENT_NAME=${FINWISE_AZURE_AI_FOUNDRY_LLM_DEPLOYMENT_NAME}
+          # --- Azure service principal ---
+          FINWISE_AZURE_TENANT_ID=${FINWISE_AZURE_TENANT_ID}
+          FINWISE_AZURE_CLIENT_ID=${FINWISE_AZURE_CLIENT_ID}
+          FINWISE_AZURE_CLIENT_SECRET=${FINWISE_AZURE_CLIENT_SECRET}
+          # --- Stock Agent ---
+          STOCK_AGENT_PROJECT_ENDPOINT=${STOCK_AGENT_PROJECT_ENDPOINT}
+          STOCK_AGENT_NAME=${STOCK_AGENT_NAME}
+          # --- Data store toggle ---
+          FINWISE_FORCE_IN_MEMORY_DATA=${FINWISE_FORCE_IN_MEMORY_DATA}
+          EOF
+
+          # In full mode, add infrastructure config for the Docker network
+          if [ "${{ needs.resolve-mode.outputs.in_memory }}" != "true" ]; then
+            cat >> .env <<'STATIC'
+          # --- CosmosDB emulator (hardcoded, Docker network) ---
+          FINWISE_COSMOSDB_ENABLED=true
+          FINWISE_COSMOSDB_ENDPOINT=https://finwise-cosmosdb-emulator:8081/
+          FINWISE_COSMOSDB_KEY=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==
+          FINWISE_COSMOSDB_DATABASE_NAME=FinWise
+          FINWISE_COSMOSDB_CONTAINER_NAME=UserProfiles
+          FINWISE_COSMOSDB_ALLOW_INSECURE_TLS=true
+          # --- Redis (hardcoded, Docker network) ---
+          FINWISE_REDIS_ENABLED=true
+          FINWISE_REDIS_CONNECTION_STRING=finwise-redis:6379
+          FINWISE_REDIS_SESSION_TTL_MINUTES=1440
+          STATIC
+          fi
+
+      - name: Extract Docker image tag
+        id: image-tag
+        run: |
+          tag=$(grep -oP '(?<=image: )[^\s]+' docker-compose.finwise.yml | head -1)
+          echo "tag=${tag}" >> $GITHUB_OUTPUT
+          echo "Docker image tag: ${tag}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/FinWise.McpServer/Dockerfile
+          push: false
+          load: true
+          tags: ${{ steps.image-tag.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Start Docker stack
+        run: |
+          if [ "${{ needs.resolve-mode.outputs.in_memory }}" = "true" ]; then
+            echo "::notice::Fast mode — starting server only (in-memory stores)"
+            docker compose -f docker-compose.finwise.yml up -d
+          else
+            echo "::notice::Full mode — starting full stack (infra + server)"
+            docker compose up -d
+          fi
+
+      - name: Wait for MCP server healthy
+        run: |
+          wait_seconds=120
+          if [ "${{ needs.resolve-mode.outputs.in_memory }}" = "true" ]; then
+            wait_seconds=60
+          fi
+          timeout $wait_seconds bash -c '
+            until curl -sf http://localhost:5000/health > /dev/null 2>&1; do
+              sleep 5
+            done
+          ' || {
+            echo "::error::MCP server health check timed out after ${wait_seconds}s"
+            if [ "${{ needs.resolve-mode.outputs.in_memory }}" = "true" ]; then
+              docker compose -f docker-compose.finwise.yml logs --tail=40 finwise-mcp-server
+            else
+              docker compose logs --tail=40 finwise-mcp-server
+            fi
+            exit 1
+          }
+
+      - name: E2E tests — MCP Server
+        run: >
+          dotnet test tests/FinWise.McpServer.IntegrationTests/
+          --no-build -c Release
+          -s ${{ env.TEST_RUNSETTINGS }}
+          --logger trx
+          --results-directory TestResults
+
+      - name: Container tests
+        run: >
+          dotnet test tests/FinWise.McpServer.ContainerTests/
+          --no-build -c Release
+          -s ${{ env.TEST_RUNSETTINGS }}
+          --logger trx
+          --results-directory TestResults
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          if [ "${{ needs.resolve-mode.outputs.in_memory }}" = "true" ]; then
+            docker compose -f docker-compose.finwise.yml logs finwise-mcp-server > finwise-mcp-server.log
+          else
+            docker compose logs finwise-mcp-server > finwise-mcp-server.log
+          fi
+
+      - name: Upload test results and logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-container-test-results
+          path: |
+            TestResults/*.trx
+            finwise-mcp-server.log
+          if-no-files-found: ignore
+
+      - name: Test Report — E2E & Container Tests
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        uses: dorny/test-reporter@v3
+        with:
+          name: E2E & Container Tests
+          path: TestResults/*.trx
+          reporter: dotnet-trx
+
+      - name: Teardown
+        if: always()
+        run: |
+          if [ "${{ needs.resolve-mode.outputs.in_memory }}" = "true" ]; then
+            docker compose -f docker-compose.finwise.yml down --timeout 10
+          else
+            docker compose down --timeout 10
+          fi
+
+      - name: Cleanup .env
+        if: always()
+        run: rm -f .env
+
+  # ---------------------------------------------------------------------------
+  # Integration Tests — CosmosDB emulator + Redis (full mode only)
+  # Reuses build artifacts from build-and-unit-tests.
+  # ---------------------------------------------------------------------------
+  integration-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [build-and-unit-tests, resolve-mode]
+    if: needs.resolve-mode.outputs.in_memory != 'true'
+    environment: finwise-ci-testing
+    env:
+      STOCK_AGENT_PROJECT_ENDPOINT: ${{ vars.STOCK_AGENT_PROJECT_ENDPOINT }}
+      STOCK_AGENT_NAME: ${{ vars.STOCK_AGENT_NAME }}
+      FINWISE_AZURE_TENANT_ID: ${{ vars.FINWISE_AZURE_TENANT_ID }}
+      FINWISE_AZURE_CLIENT_ID: ${{ vars.FINWISE_AZURE_CLIENT_ID }}
+      FINWISE_AZURE_CLIENT_SECRET: ${{ secrets.FINWISE_AZURE_CLIENT_SECRET }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+
+      - name: Verify Docker Compose version
+        run: |
+          raw_version=$(docker compose version --short)
+          version="${raw_version#v}"
+          echo "Docker Compose version: $raw_version"
+          required="${{ env.DOCKER_COMPOSE_MIN_VERSION }}"
+          if [ "$(printf '%s\n' "$required" "$version" | sort -V | head -n1)" != "$required" ]; then
+            echo "::error::Docker Compose >= $required is required (found $raw_version)"
+            exit 1
+          fi
+
+      - name: Start infrastructure
+        run: docker compose -f docker-compose.infra.yml up -d
+
+      - name: Wait for healthy infrastructure
+        run: |
+          timeout 120 bash -c '
+            until docker compose -f docker-compose.infra.yml ps --format json \
+              | jq -se "length > 0 and all(.[]; .Health == \"healthy\")" > /dev/null 2>&1; do
+              sleep 5
+            done
+          ' || {
+            echo "::error::Infrastructure health check timed out after 120s"
+            docker compose -f docker-compose.infra.yml ps
+            exit 1
+          }
+
+      - name: Integration tests — CosmosDB
+        run: >
+          dotnet test tests/FinWise.CosmosDb.IntegrationTests/
+          --no-build -c Release
+          -s ${{ env.TEST_RUNSETTINGS }}
+          --logger trx
+          --results-directory TestResults
+
+      - name: Integration tests — Redis
+        run: >
+          dotnet test tests/FinWise.Redis.IntegrationTests/
+          --no-build -c Release
+          -s ${{ env.TEST_RUNSETTINGS }}
+          --logger trx
+          --results-directory TestResults
+
+      - name: Integration tests — Stock Agent
+        run: >
+          dotnet test tests/FinWise.StockAgent.IntegrationTests/
+          --no-build -c Release
+          -s ${{ env.TEST_RUNSETTINGS }}
+          --logger trx
+          --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: integration-test-results
+          path: TestResults/*.trx
+          if-no-files-found: ignore
+
+      - name: Test Report — Integration Tests
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        uses: dorny/test-reporter@v3
+        with:
+          name: Integration Tests
+          path: TestResults/*.trx
+          reporter: dotnet-trx
+
+      - name: Teardown infrastructure
+        if: always()
+        run: docker compose -f docker-compose.infra.yml down --timeout 10
