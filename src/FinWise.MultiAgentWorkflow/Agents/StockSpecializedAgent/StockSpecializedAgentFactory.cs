@@ -1,6 +1,6 @@
 ﻿using System.ClientModel;
+using Azure.AI.Extensions.OpenAI;
 using Azure.AI.Projects;
-using Azure.AI.Projects.Agents;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Foundry;
 using Serilog;
@@ -23,10 +23,9 @@ public class StockSpecializedAgentFactory
     {
         Log.Information("Resolving Foundry agent by name: {AgentName}", _agentName);
 
-        ProjectsAgentRecord agentRecord;
         try
         {
-            agentRecord = await _projectClient.AgentAdministrationClient.GetAgentAsync(_agentName);
+            await _projectClient.AgentAdministrationClient.GetAgentAsync(_agentName);
         }
         catch (ClientResultException ex) when (ex.Status == 404)
         {
@@ -34,7 +33,11 @@ public class StockSpecializedAgentFactory
                 $"No Foundry agent found with name '{_agentName}'", ex);
         }
 
-        FoundryAgent agent = _projectClient.AsAIAgent(agentRecord);
+        // Use AgentReference (name only, no version) so the Responses API always resolves
+        // the latest deployed version. AsAIAgent(ProjectsAgentRecord) extracted a specific
+        // version ID from the Agent Administration API that the Responses API endpoint of
+        // newer Foundry projects does not accept, causing agent invocation to fail.
+        FoundryAgent agent = _projectClient.AsAIAgent(new AgentReference(_agentName));
         Log.Information("Resolved Foundry agent '{AgentName}'", agent.Name);
         return agent;
     }
