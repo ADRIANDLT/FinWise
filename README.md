@@ -362,11 +362,10 @@ Used by both the Foundry LLM and the (optional) Stock Agent. `ClientSecretCreden
 
 ### Optional — Stock Agent
 
-Only required if you want to use the `StockSpecializedAgent` for real-time stock research. The two vars below are stock-specific; auth reuses the shared service principal above.
+Only required if you want to use the `StockSpecializedAgent` for real-time stock research. The variable below is stock-specific; the Foundry endpoint reuses `FINWISE_AZURE_AI_FOUNDRY_PROJECT_ENDPOINT` (defined in the Azure AI Foundry section above) and auth reuses the shared service principal.
 
 | Variable | Description | Example |
 |----------|-------------|----------|
-| `STOCK_AGENT_PROJECT_ENDPOINT` | Azure AI Foundry project endpoint | `https://<resource>.services.ai.azure.com/api/projects/<project>` |
 | `STOCK_AGENT_NAME` | Name of the stock agent in Foundry | `stock-specialized-investment-agent` |
 
 ### Optional — Storage & Runtime
@@ -457,11 +456,10 @@ Create a GitHub Environment named **`finwise-ci-testing`** at Settings → Envir
 
 | Variable | Purpose |
 |----------|--------|
-| `FINWISE_AZURE_AI_FOUNDRY_PROJECT_ENDPOINT` | Azure AI Foundry project endpoint |
+| `FINWISE_AZURE_AI_FOUNDRY_PROJECT_ENDPOINT` | Azure AI Foundry project endpoint (shared by LLM and Stock Agent) |
 | `FINWISE_AZURE_AI_FOUNDRY_LLM_DEPLOYMENT_NAME` | LLM deployment name |
 | `FINWISE_AZURE_TENANT_ID` | Azure AD tenant ID |
 | `FINWISE_AZURE_CLIENT_ID` | Service principal client ID |
-| `STOCK_AGENT_PROJECT_ENDPOINT` | Stock Agent Foundry endpoint |
 | `STOCK_AGENT_NAME` | Stock Agent name |
 | `FINWISE_FORCE_IN_MEMORY_DATA` | `false` for full mode, `true` for fast mode |
 
