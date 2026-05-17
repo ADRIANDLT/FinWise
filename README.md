@@ -31,7 +31,9 @@ FinWise is an [MCP](https://modelcontextprotocol.io/) server built with .NET 10 
 | 📊 **AdvisorAgent** | Personalized investment advice (once profile is ready) |
 | 📈 **StockSpecializedAgent** | Real-time stock research via Azure AI Foundry |
 
-The multi-agent workflow, orchestrator, profile and advisor agents "live" in docker within the FinWise MCP container. However the stock-specialized agent is a more advance agent, grounded with additional annual-report documents and Bing search, and it's deployed in Azure AI Foundry, using A2A as remote communication protocol (handled transparently by the Microsoft Agent Framework via `Microsoft.Agents.AI.Foundry`).
+The multi-agent workflow, orchestrator, profile, and advisor agents run in Docker inside the FinWise MCP container.
+The stock-specialized agent is more advanced. It is grounded with additional annual reports and Bing Search, and it is deployed in Azure AI Foundry.
+It communicates remotely over A2A, which is handled transparently by the Microsoft Agent Framework via `Microsoft.Agents.AI.Foundry`.
 
 ![FinWise Internal Architecture Diagram](./specs/images/finwise-internal-architecture-diagram.png)
 
