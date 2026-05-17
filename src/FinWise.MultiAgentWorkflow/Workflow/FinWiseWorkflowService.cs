@@ -106,10 +106,16 @@ public class FinWiseWorkflowService
                 var (response, workflowOutputs, lastRespondingAgent) = await ExecuteWorkflowAsync(workflow, messageHistory, workflowCts.Token);
                 AppendUniqueMessages(messageHistory, workflowOutputs);
 
-                // If we got no valid response (only orchestrator talked), that's an error
-                if (string.IsNullOrEmpty(response) && workflowOutputs.Count > 0)
+                // If we got no valid response, surface a retryable message.
+                // This covers two failure modes:
+                //  - Outputs were produced but only by the orchestrator (failed handoff).
+                //  - No outputs at all — the orchestrator silently skipped a handoff,
+                //    typically when the LLM judges the user's question was already answered
+                //    in a prior turn. The user-facing message must look transient so callers
+                //    (including E2E test retry logic) treat it as recoverable instead of fatal.
+                if (string.IsNullOrEmpty(response))
                 {
-                    Log.Error("No valid response from profile_agent or advisor_agent. Orchestrator may have failed to handoff.");
+                    Log.Error("No valid response from profile_agent or advisor_agent (workflow outputs: {Count}). Orchestrator may have failed to handoff.", workflowOutputs.Count);
                     response = "I'm having trouble processing your request. Please try again.";
                 }
 
@@ -168,7 +174,7 @@ public class FinWiseWorkflowService
 
                 Log.Information("Request completed successfully");
                 return new WorkflowResponse(
-                    response ?? "No response generated.",
+                    response!,
                     agentSessionId,
                     wasReset);
             }
