@@ -57,7 +57,7 @@ This is the final architecture deployed in Azure Cloud.
 The system is fully stateless, with all data stored externally.
 It supports horizontal scaling through multiple instances of FinWise Docker Container at Azure Container Apps, demonstrating a production-ready infrastructure.
 
-![alt text](./specs/images/finwise-infrastructure-architecture-diagram.png)
+![FinWise Infrastructure Production Architecture Diagram](./specs/images/finwise-infrastructure-architecture-diagram.png)
 
 ## 🚀 Quick Start
 
