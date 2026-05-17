@@ -203,8 +203,8 @@ public abstract class McpEndToEndTestBase : IDisposable
                 return lastResult;
 
             Logger.LogWarning("Transient error on attempt {Attempt}/{Max}, retrying in {Delay}s...",
-                attempt, MaxAttempts, attempt * 3);
-            await Task.Delay(TimeSpan.FromSeconds(attempt * 3));
+                attempt, MaxAttempts, attempt);
+            await Task.Delay(TimeSpan.FromSeconds(attempt));
         }
 
         return lastResult;

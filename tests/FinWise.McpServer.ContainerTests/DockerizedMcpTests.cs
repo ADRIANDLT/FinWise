@@ -6,8 +6,14 @@ using Xunit.Abstractions;
 namespace FinWise.McpServer.ContainerTests;
 
 /// <summary>
-/// Re-exercises existing E2E MCP protocol scenarios against the Dockerized server.
-/// Proves the app works identically inside the container.
+/// Container smoke test. Proves the Dockerized FinWise MCP server boots,
+/// accepts an MCP `initialize` handshake and exposes the expected tools.
+///
+/// The end-to-end functional scenarios live in
+/// <c>FinWise.McpServer.IntegrationTests</c> and already run against the
+/// same containerized server in CI — duplicating them here previously
+/// doubled the E2E wall time without adding coverage, so this project now
+/// keeps only the smoke checks that depend on the container itself.
 /// </summary>
 [Trait("Category", "Container")]
 public class DockerizedMcpTests : McpEndToEndTestBase
@@ -21,24 +27,16 @@ public class DockerizedMcpTests : McpEndToEndTestBase
     }
 
     [SkippableFact]
-    public async Task Container_McpInitialize_ShouldReturnSessionId()
+    public async Task Container_McpHandshake_ShouldInitializeAndListTools()
     {
         await EnsureContainerRunning();
 
+        // 1. MCP initialize handshake must succeed.
         var sessionId = await InitializeMcpSession();
-
         sessionId.Should().NotBeNullOrEmpty("MCP initialize should return a session ID");
         Output.WriteLine($"Container MCP Session: {sessionId}");
-    }
 
-    [SkippableFact]
-    public async Task Container_ToolDiscovery_ShouldExposeTools()
-    {
-        await EnsureContainerRunning();
-        await InitializeMcpSession();
-
-        Output.WriteLine("=== CONTAINER TOOL DISCOVERY TEST ===");
-
+        // 2. The container must expose the expected tools.
         var listRequest = new
         {
             jsonrpc = "2.0",
@@ -82,49 +80,5 @@ public class DockerizedMcpTests : McpEndToEndTestBase
         toolNames.Should().Contain("run_finwise_workflow");
         toolNames.Should().Contain("reset_conversation");
         toolNames.Should().Contain("get_storage_info");
-    }
-
-    [SkippableFact]
-    public async Task Container_FinancialAdvice_ShouldAskForEmail()
-    {
-        await EnsureContainerRunning();
-        await InitializeMcpSession();
-
-        var response = await CallFinancialAdviceTool("Give me financial advice");
-
-        response.ToLowerInvariant().Should().Contain("email",
-            because: "new session should ask for email");
-        Output.WriteLine($"Container response: {TruncateForLog(response)}");
-    }
-
-    [SkippableFact]
-    public async Task Container_ResetConversation_ShouldClear()
-    {
-        await EnsureContainerRunning();
-        await InitializeMcpSession();
-        await SetupTestProfile();
-
-        var resetResponse = await CallResetSessionTool();
-
-        // Assert — should confirm reset (different message for database vs in-memory stores)
-        var resetLower = resetResponse.ToLowerInvariant();
-        bool confirmsCleared = resetLower.Contains("cleared");
-        bool indicatesInMemory = resetLower.Contains("in-memory");
-        (confirmsCleared || indicatesInMemory).Should().BeTrue(
-            because: "reset should confirm clearing (database store) or explain in-memory limitation. Got: " + resetResponse);
-        Output.WriteLine($"Container reset: {TruncateForLog(resetResponse)}");
-
-        var followUp = await CallFinancialAdviceTool("Give me financial advice");
-        var followUpLower = followUp.ToLowerInvariant();
-
-        // After reset, the system should either ask for email (session actually cleared)
-        // or provide advice (InMemory store where clear is a no-op, profile retained)
-        bool asksForEmail = followUpLower.Contains("email");
-        bool providesAdvice = followUpLower.Contains("invest") || followUpLower.Contains("portfolio") ||
-                              followUpLower.Contains("stock") || followUpLower.Contains("fund") ||
-                              followUpLower.Contains("bond") || followUpLower.Contains("recommend") ||
-                              followUpLower.Contains("risk") || followUpLower.Contains("financial");
-        (asksForEmail || providesAdvice).Should().BeTrue(
-            because: "after reset, system should either ask for email or provide advice. Got: " + followUp);
     }
 }
