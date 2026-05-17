@@ -22,6 +22,9 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
+    <None Update="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\src\FinWise.McpServer\FinWise.McpServer.csproj" />
     <ProjectReference Include="..\FinWise.McpServer.E2ETestBase\FinWise.McpServer.E2ETestBase.csproj" />
   </ItemGroup>
