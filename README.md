@@ -44,7 +44,7 @@ It communicates remotely over A2A, which is handled transparently by the Microso
 | **Runtime** | .NET 10, C# latest |
 | **AI** | Microsoft Agent Framework + Azure AI Foundry |
 | **Agents** | Microsoft.Agents.AI (NuGet) |
-| **Protocols** | MCP + A2A  |
+| **Protocols** | MCP + A2A |
 | **Storage** | Azure CosmosDB (profiles), Redis (sessions) |
 | **Logging** | Serilog (structured) |
 | **Testing** | xUnit, FluentAssertions, Moq |
