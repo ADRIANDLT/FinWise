@@ -8,7 +8,7 @@ The request is routed into a multi-agent workflow where specialized agents handl
 The system is protocol-based, which means it is not tied to a specific UI or platform.
 This makes it flexible, extensible, and easy to integrate with different AI ecosystems.
 
-For instance you can use FinWise,as an end user from Claude app. For dev test you can also test it with GitHub Copilot:
+For instance, you can use FinWise as an end user in the Claude app. For development testing, you can also test it with GitHub Copilot:
 
 ![FinWise user perspective diagram](./specs/images/finwise-user-perspective.png)
 
