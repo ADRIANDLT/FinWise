@@ -13,7 +13,7 @@ services:
     build:
       context: .
       dockerfile: src/FinWise.McpServer/Dockerfile
-    image: finwiseproject/finwise-mcp-server:1.0.1
+    image: finwiseproject/finwise-mcp-server:1.0.2
     container_name: finwise-mcp-server
     ports:
       - "5000:5000"
