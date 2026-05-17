@@ -65,7 +65,7 @@ It supports horizontal scaling through multiple instances of FinWise Docker Cont
 
 - 🐳 [Docker Desktop 4.22+](https://www.docker.com/products/docker-desktop/) (Docker Compose v2.20+) — required for both options. The `include:` directive in `docker-compose.yml` requires Compose v2.20 or later.
 - 🔧 [.NET 10 SDK](https://dotnet.microsoft.com/download) — only for Mode B and running tests
-- 🔑 Azure Foundry credentials (if not provided the workflow will still work without the stock specialized agent)
+- 🔑 Azure AI Foundry credentials (if not provided the workflow will still work without the stock specialized agent)
 
 ### Running the MCP Server
 
