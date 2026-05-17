@@ -2,6 +2,26 @@
 
 **A Multi-Agent Investment Assistant for Smarter Financial Decisions**
 
+This is how FinWise works at a high level.
+Users interact through any chat interface that supports MCP.
+The request is routed into a multi-agent workflow where specialized agents handle different tasks.
+The system is protocol-based, which means it is not tied to a specific UI or platform.
+This makes it flexible, extensible, and easy to integrate with different AI ecosystems.
+
+For instance you can use FinWise,as an end user from Claude app. For dev test you can also test it with GitHub Copilot:
+
+![FinWise user perspective diagram](./specs/images/finwise-user-perspective.png)
+
+## 🎬 Demo Video
+ 
+> Watch a demo-video of FinWise covering the user experience, architecture and major code highlights!
+>
+> <a href="https://1drv.ms/v/c/368861ad43af4978/IQAxR6uwHTIXTJi0Sw5YsIQsAcWQtxkonqKVJe0riojnHjw?e=MiQGTQ">
+>   <img src="./specs/images/finwise-demo-video-thumbnail-code.png" alt="Watch FinWise demo video" width="560">
+> </a>
+
+## Internal Architecture
+
 FinWise is an [MCP](https://modelcontextprotocol.io/) server built with .NET 10 and the [Microsoft Agent Framework](https://learn.microsoft.com/en-us/microsoft/agents/) that orchestrates four AI agents via hub-and-spoke handoffs:
 
 | Agent | Role |
@@ -11,42 +31,31 @@ FinWise is an [MCP](https://modelcontextprotocol.io/) server built with .NET 10 
 | 📊 **AdvisorAgent** | Personalized investment advice (once profile is ready) |
 | 📈 **StockSpecializedAgent** | Real-time stock research via Azure AI Foundry |
 
-```
-                    ┌──────────────┐
-                    │  MCP Client  │  (VS Code, Claude Desktop, etc.)
-                    └──────┬───────┘
-                           │ HTTP POST /mcp
-                           ▼
-                    ┌──────────────┐
-                    │ Orchestrator │  🎯 routes every request
-                    └──┬───┬───┬───┘
-                       │   │   │
-              ┌────────┘   │   └────────┐
-              ▼            ▼            ▼
-        ┌──────────┐ ┌──────────┐ ┌──────────┐
-        │ Profile  │ │ Advisor  │ │  Stock   │
-        │  Agent   │ │  Agent   │ │  Agent   │
-        │   👤     │ │   📊    │ │   📈     │
-        └────┬─────┘ └──────────┘ └────┬─────┘
-             │                         │
-             ▼                         ▼
-        CosmosDB                  Azure AI Foundry
-        (profiles)                (stock research)
-```
+The multi-agent workflow, orchestrator, profile and advisor agents "live" in docker within the FinWise MCP container. However the stock-specialized agent is a more advance agent, grounded with additional annual-report documents and Bing search, and it's deployed in Azure AI Foundry, using A2A as remote communication protocol (handled transparently by the Microsoft Agent Framework via `Microsoft.Agents.AI.Foundry`).
+
+![FinWise Internal Architecture Diagram](./specs/images/finwise-internal-architecture-diagram.png)
 
 ### 🛠️ Tech Stack
 
 | | Technology |
 |---|---|
 | **Runtime** | .NET 10, C# latest |
-| **AI** | Microsoft.Extensions.AI + Azure OpenAI |
-| **Agents** | Microsoft.Agents.AI (NuGet preview) |
-| **Protocol** | MCP via ModelContextProtocol.AspNetCore |
+| **AI** | Microsoft Agent Framework + Azure AI Foundry |
+| **Agents** | Microsoft.Agents.AI (NuGet) |
+| **Protocols** | MCP + A2A  |
 | **Storage** | Azure CosmosDB (profiles), Redis (sessions) |
 | **Logging** | Serilog (structured) |
 | **Testing** | xUnit, FluentAssertions, Moq |
 
 ---
+
+## Infrastructure "Production" Architecture
+
+This is the final architecture deployed in Azure Cloud.
+The system is fully stateless, with all data stored externally.
+It supports horizontal scaling through multiple instances of FinWise Docker Container at Azure Container Apps, demonstrating a production-ready infrastructure.
+
+![alt text](./specs/images/finwise-infrastructure-architecture-diagram.png)
 
 ## 🚀 Quick Start
 
@@ -54,7 +63,7 @@ FinWise is an [MCP](https://modelcontextprotocol.io/) server built with .NET 10 
 
 - 🐳 [Docker Desktop 4.22+](https://www.docker.com/products/docker-desktop/) (Docker Compose v2.20+) — required for both options. The `include:` directive in `docker-compose.yml` requires Compose v2.20 or later.
 - 🔧 [.NET 10 SDK](https://dotnet.microsoft.com/download) — only for Mode B and running tests
-- 🔑 Azure OpenAI credentials (endpoint, deployment name, API key)
+- 🔑 Azure Foundry credentials (if not provided the workflow will still work without the stock specialized agent)
 
 ### Running the MCP Server
 
@@ -67,7 +76,7 @@ FinWise supports four deployment modes — **A & B for local development**, **C 
 | ☁️ | **Mode C: Docker → Azure DBs** | Docker container | Azure Cosmos DB + Azure Managed Redis | Testing against real Azure databases locally |
 | 🌐 | **Mode D: Full Azure Cloud** | Azure Container Apps | Azure Cosmos DB + Azure Managed Redis | Production deployment, scale-out |
 
-> 💡 Modes A & B use local emulators — no Azure subscription needed. Modes C & D require Azure database credentials (see `.env.azure.template`).
+> 💡 Modes A & B use local emulators — no Azure subscription needed, except for AI Foundry. Modes C & D require Azure database credentials (see `.env.azure.template`).
 
 ---
 
@@ -179,7 +188,7 @@ This mode has been validated with **5 container replicas** — all E2E tests pas
 
 | Mode | Scenario | Command | Env file |
 |------|----------|---------|----------|
-| **A** | Full local stack (infra + server) | `docker compose up -d` | `.env` (auto-read) |
+| **A** | Full local stack (infra + server) | `docker compose up -d --build` | `.env` (auto-read) |
 | **B** | Infrastructure only (for `dotnet run`) | `docker compose -f docker-compose.infra.yml up -d` | — |
 | **C** | Server only → Azure databases | `docker compose -f docker-compose.finwise.yml --env-file .env --env-file .env.azure up -d` | `.env` + `.env.azure` |
 
@@ -193,8 +202,8 @@ This mode has been validated with **5 container replicas** — all E2E tests pas
 
 | Client | Setup |
 |--------|-------|
-| **VS Code** | The repo includes `.vscode/mcp.json` — open the workspace and use `FinWise-Orchestrator-MCP` from Copilot Chat |
-| **Claude Desktop** | Add `http://localhost:5000/mcp` as an MCP server |
+| **VS Code** | The repo includes [.vscode/mcp.json](.vscode/mcp.json) — open the workspace and use `FinWise-Orchestrator-MCP` from Copilot Chat |
+| **Claude Desktop** | Add `http://localhost:5000/mcp` as an MCP server like in this file: [Claude Desktop MCP Config file](./client-apps-config/Claude-Client-App/claude_desktop_config.json) |
 | **Other clients** | Point any MCP client to `http://localhost:5000/mcp` |
 
 ---
@@ -223,9 +232,9 @@ dotnet test tests/FinWise.McpServer.ContainerTests/
 
 | Category | What it needs | Tests |
 |----------|--------------|-------|
-| `Unit` | Nothing | Workflow, session, agent logic (89 tests) |
-| `Integration` | Docker infra or Azure credentials | CosmosDB, Redis, StockAgent, MCP E2E (40 tests) |
-| `Container` | Full Docker stack (Mode A) | Docker-specific validation (11 tests) |
+| `Unit` | Nothing | Workflow, session, agent logic |
+| `Integration` | Docker infra or Azure credentials | CosmosDB, Redis, StockAgent, MCP E2E |
+| `Container` | Full Docker stack (Mode A) | Docker-specific validation |
 
 ### Run Settings
 
@@ -484,5 +493,6 @@ Serilog writes structured logs to both **console** and a **rolling file**:
 | Resource | Description |
 |----------|-------------|
 | 📖 [CosmosDB Setup Guide](docs/COSMOSDB-SETUP.md) | Local development with CosmosDB emulator |
-| 📋 [Feature Specifications](specs/) | Detailed feature requirements and designs |
+| � [Redis Setup Guide](docs/REDIS-SETUP.md) | Local Redis container for agent sessions |
+| �📋 [Feature Specifications](specs/) | Detailed feature requirements and designs |
 | 📓 [Project Journal](journal/) | Narrative chronicles of the development journey |
