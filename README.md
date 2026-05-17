@@ -495,6 +495,6 @@ Serilog writes structured logs to both **console** and a **rolling file**:
 | Resource | Description |
 |----------|-------------|
 | 📖 [CosmosDB Setup Guide](docs/COSMOSDB-SETUP.md) | Local development with CosmosDB emulator |
-| � [Redis Setup Guide](docs/REDIS-SETUP.md) | Local Redis container for agent sessions |
-| �📋 [Feature Specifications](specs/) | Detailed feature requirements and designs |
+| [Redis Setup Guide](docs/REDIS-SETUP.md) | Local Redis container for agent sessions |
+| 📋 [Feature Specifications](specs/) | Detailed feature requirements and designs |
 | 📓 [Project Journal](journal/) | Narrative chronicles of the development journey |
