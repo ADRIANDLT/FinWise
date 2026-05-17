@@ -483,6 +483,13 @@ Serilog writes structured logs to both **console** and a **rolling file**:
 ```
 %LOCALAPPDATA%\FinWise-Orchestrator-MCP\Logs\finwise-{date}.log
 ```
+To check the log file:
+
+PowerShell 
+cd "$env:LOCALAPPDATA\FinWise-Orchestrator-MCP\Logs"
+
+Command Line Windows:
+Set-Location "$env:LOCALAPPDATA\FinWise-Orchestrator-MCP\Logs"
 
 > 🐳 **In Docker**: File logging is unavailable (non-root user). Use `docker compose logs -f finwise-mcp-server` for console output.
 
