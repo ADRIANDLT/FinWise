@@ -18,14 +18,14 @@ public static class StockAgentFactory
     /// </summary>
     public static async Task<AIAgent?> TryCreateStockAgentAsync()
     {
-        var endpoint = Environment.GetEnvironmentVariable("STOCK_AGENT_PROJECT_ENDPOINT");
+        var endpoint = Environment.GetEnvironmentVariable("FINWISE_AZURE_AI_FOUNDRY_PROJECT_ENDPOINT");
         var agentName = Environment.GetEnvironmentVariable("STOCK_AGENT_NAME");
         var tenantId = Environment.GetEnvironmentVariable("FINWISE_AZURE_TENANT_ID");
         var clientId = Environment.GetEnvironmentVariable("FINWISE_AZURE_CLIENT_ID");
         var clientSecret = Environment.GetEnvironmentVariable("FINWISE_AZURE_CLIENT_SECRET");
 
         // Log env var status (without exposing secrets) so missing config is diagnosable from logs
-        Log.Information("STOCK_AGENT_PROJECT_ENDPOINT: {Status}", string.IsNullOrEmpty(endpoint) ? "NOT SET" : "SET");
+        Log.Information("FINWISE_AZURE_AI_FOUNDRY_PROJECT_ENDPOINT: {Status}", string.IsNullOrEmpty(endpoint) ? "NOT SET" : "SET");
         Log.Information("STOCK_AGENT_NAME: {Status}", string.IsNullOrEmpty(agentName) ? "NOT SET" : "SET");
         Log.Information("FINWISE_AZURE_TENANT_ID: {Status}", string.IsNullOrEmpty(tenantId) ? "NOT SET" : "SET");
         Log.Information("FINWISE_AZURE_CLIENT_ID: {Status}", string.IsNullOrEmpty(clientId) ? "NOT SET" : "SET");

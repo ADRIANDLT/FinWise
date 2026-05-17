@@ -19,7 +19,7 @@ public class StockSpecializedAgentIntegrationTests
 
     public StockSpecializedAgentIntegrationTests()
     {
-        _endpoint = Environment.GetEnvironmentVariable("STOCK_AGENT_PROJECT_ENDPOINT");
+        _endpoint = Environment.GetEnvironmentVariable("FINWISE_AZURE_AI_FOUNDRY_PROJECT_ENDPOINT");
         _tenantId = Environment.GetEnvironmentVariable("FINWISE_AZURE_TENANT_ID");
         _clientId = Environment.GetEnvironmentVariable("FINWISE_AZURE_CLIENT_ID");
         _clientSecret = Environment.GetEnvironmentVariable("FINWISE_AZURE_CLIENT_SECRET");
@@ -32,7 +32,7 @@ public class StockSpecializedAgentIntegrationTests
     private AIProjectClient CreateClient()
     {
         Skip.If(string.IsNullOrWhiteSpace(_endpoint),
-            "STOCK_AGENT_PROJECT_ENDPOINT not set — skipping Foundry integration test.");
+            "FINWISE_AZURE_AI_FOUNDRY_PROJECT_ENDPOINT not set — skipping Foundry integration test.");
         Skip.If(string.IsNullOrWhiteSpace(_tenantId),
             "FINWISE_AZURE_TENANT_ID not set — skipping Foundry integration test.");
         Skip.If(string.IsNullOrWhiteSpace(_clientId),
