@@ -98,6 +98,8 @@ dotnet test tests/FinWise.McpServer.ContainerTests/
 
 Single source of truth: `Directory.Build.props` (`<FinWiseVersion>`). It propagates `<Version>` to all .NET projects automatically.
 
+CI publishes Docker Hub images tagged from `<FinWiseVersion>` automatically on successful `main` pushes, and also adds `latest` plus an immutable Git SHA tag.
+
 Bump these four files together on every version change:
 
 | File | What to update | Why |

@@ -31,6 +31,7 @@ env:
   DOTNET_VERSION: '10.0.x'
   TEST_RUNSETTINGS: test.docker-local.runsettings
   DOCKER_COMPOSE_MIN_VERSION: '2.24.0'
+  IMAGE_NAME: finwiseproject/finwise-mcp-server
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -381,3 +382,73 @@ jobs:
       - name: Teardown infrastructure
         if: always()
         run: docker compose -f docker-compose.infra.yml down --timeout 10
+
+  # ---------------------------------------------------------------------------
+  # Publish Image — build and push to Docker Hub (main pushes only)
+  #
+  # Runs only after all test jobs pass. A skipped integration-tests job (fast
+  # mode) is acceptable, but a failed one blocks the publish. Tags the image
+  # with the version from Directory.Build.props and 'latest'.
+  # ---------------------------------------------------------------------------
+  publish-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: finwise-ci-testing
+    needs: [build-and-unit-tests, e2e-and-container-tests, integration-tests]
+    if: >-
+      ${{ !cancelled()
+      && github.event_name == 'push'
+      && github.ref == 'refs/heads/main'
+      && needs.build-and-unit-tests.result == 'success'
+      && needs.e2e-and-container-tests.result == 'success'
+      && (needs.integration-tests.result == 'success' || needs.integration-tests.result == 'skipped') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Read version from Directory.Build.props
+        id: version
+        run: |
+          version=$(grep -oPm1 '(?<=<FinWiseVersion>)[^<]+' Directory.Build.props || true)
+          if [ -z "$version" ]; then
+            echo "::error::Could not read <FinWiseVersion> from Directory.Build.props"
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "::notice::Publishing ${IMAGE_NAME}:${version} and ${IMAGE_NAME}:latest"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Validate Docker Hub credentials
+        env:
+          FINWISE_DOCKER_USER: ${{ secrets.FINWISE_DOCKER_USER }}
+          FINWISE_DOCKER_PASSWORD: ${{ secrets.FINWISE_DOCKER_PASSWORD }}
+        run: |
+          missing=()
+          [ -z "$FINWISE_DOCKER_USER" ] && missing+=("FINWISE_DOCKER_USER")
+          [ -z "$FINWISE_DOCKER_PASSWORD" ] && missing+=("FINWISE_DOCKER_PASSWORD")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required Docker Hub secrets: ${missing[*]}"
+            echo "Add them to the 'finwise-ci-testing' GitHub environment. See README.md."
+            exit 1
+          fi
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.FINWISE_DOCKER_USER }}
+          password: ${{ secrets.FINWISE_DOCKER_PASSWORD }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: src/FinWise.McpServer/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

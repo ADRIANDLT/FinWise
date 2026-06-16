@@ -178,7 +178,7 @@ The MCP server is available at **http://localhost:5000/mcp**.
 
 #### 🌐 Mode D: Full Azure Cloud (Azure Container Apps)
 
-Deploy FinWise to **Azure Container Apps** using the published Docker Hub image: `finwiseproject/finwise-mcp-server:1.0.1`. ACA pulls the image, injects environment variables, and exposes the MCP endpoint at `https://<app-name>.<env-id>.<region>.azurecontainerapps.io/mcp`.
+Deploy FinWise to **Azure Container Apps** using the published Docker Hub image: `finwiseproject/finwise-mcp-server:1.0.2`. ACA pulls the image, injects environment variables, and exposes the MCP endpoint at `https://<app-name>.<env-id>.<region>.azurecontainerapps.io/mcp`.
 
 This mode has been validated with **5 container replicas** — all E2E tests passing with zero session affinity required (Redis-backed sessions enable true scale-out).
 
