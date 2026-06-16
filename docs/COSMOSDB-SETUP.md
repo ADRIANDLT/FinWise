@@ -20,6 +20,8 @@ docker compose up -d
 
 This starts the CosmosDB Linux emulator in a Docker container.
 
+FinWise uses the GA Linux emulator image tag `mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:vnext-latest`.
+
 ### 2. Verify Emulator is Running
 
 Wait about 60 seconds for the emulator to initialize, then check:
