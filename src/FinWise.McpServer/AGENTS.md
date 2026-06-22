@@ -17,5 +17,5 @@ Packages centralized in `Directory.Packages.props`.
 
 ## MUST NOT
 
-- Never inspect conversation content or detect `PROFILE_READY:` — that's workflow logic
+- Never inspect conversation content or profile-readiness state — that's workflow logic
 - Never put business/agent logic here — belongs in MultiAgentWorkflow

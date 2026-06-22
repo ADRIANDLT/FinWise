@@ -9,14 +9,17 @@ namespace FinWise.MultiAgentWorkflow.Session;
 internal static class AgentSessionConstants
 {
     /// <summary>
-    /// Marker emitted by the profile agent when a user's profile is complete.
-    /// Used by the orchestrator for routing and by session management for reset detection.
+    /// Legacy marker formerly emitted by the profile agent when a user's profile is complete.
+    /// <b>FALLBACK ONLY:</b> Profile readiness is now tracked via structured session state
+    /// (<see cref="ProfileSessionState"/> in <c>AgentSession.StateBag</c>). This marker is
+    /// retained solely to migrate legacy sessions created before structured state existed.
     /// </summary>
     internal const string ProfileReadyMarker = "PROFILE_READY:";
 
     /// <summary>
-    /// Checks whether the conversation history contains a PROFILE_READY marker,
-    /// indicating the user's profile is complete and advisor/stock agents can be accessed.
+    /// <b>FALLBACK ONLY:</b> Checks whether the conversation history contains a legacy
+    /// PROFILE_READY marker. Used solely to migrate legacy sessions that predate the
+    /// structured <see cref="ProfileSessionState"/>; new readiness is determined from session state.
     /// </summary>
     internal static bool IsProfileReady(List<ChatMessage> history)
     {
@@ -34,8 +37,11 @@ internal static class AgentSessionConstants
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>
-    /// Extracts the userId (email) from the PROFILE_READY marker in message history.
-    /// The marker format is: "PROFILE_READY: email=user@example.com risk=... goals=... timeframe=..."
+    /// <b>FALLBACK ONLY:</b> Extracts the userId (email) from the legacy PROFILE_READY marker
+    /// in message history. The marker format is:
+    /// "PROFILE_READY: email=user@example.com risk=... goals=... timeframe=...".
+    /// Used solely to migrate legacy sessions that predate the structured
+    /// <see cref="ProfileSessionState"/>; new sessions capture the userId in session state.
     /// </summary>
     /// <returns>The email address if found, null otherwise.</returns>
     internal static string? ExtractUserIdFromMessageHistory(List<ChatMessage> history)

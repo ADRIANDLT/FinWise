@@ -29,6 +29,6 @@ Packages centralized in `Directory.Packages.props`. Testing: xUnit, FluentAssert
 |--------|-------|
 | `Agents/` | Agent factories (stateless). Each has a `.prompt.md` for system prompt |
 | `Workflow/` | `FinWiseWorkflowService` — hub-and-spoke orchestration (max 25 invocations) |
-| `Session/` | `AgentSessionManager`, reset signaling, run context, `PROFILE_READY` constant |
+| `Session/` | `AgentSessionManager`, reset signaling, run context, `ProfileSessionState` structured state (legacy `PROFILE_READY` marker constant retained only as a migration fallback) |
 | `DomainModel/` | `UserProfile` record |
 | `Infrastructure/` | Storage implementations (Redis sessions, CosmosDB/InMemory profiles) |

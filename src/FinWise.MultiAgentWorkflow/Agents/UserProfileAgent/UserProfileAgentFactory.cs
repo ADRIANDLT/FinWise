@@ -1,5 +1,6 @@
 using FinWise.MultiAgentWorkflow.DomainModel;
 using FinWise.MultiAgentWorkflow.Infrastructure.UserProfileStores;
+using FinWise.MultiAgentWorkflow.Session;
 using Microsoft.Extensions.AI;
 using Serilog;
 using System.ComponentModel;
@@ -72,6 +73,7 @@ public class UserProfileAgentFactory
 
             if (profile.IsComplete)
             {
+                ProfileReadyFlag.Current?.MarkReady(userId);
                 return $"{ResponseFoundComplete} email={userId} risk={profile.RiskTolerance} goals={profile.InvestmentGoals} timeframe={profile.InvestmentTimeframe}";
             }
             else
@@ -146,6 +148,7 @@ public class UserProfileAgentFactory
             if (profile.IsComplete)
             {
                 Log.Information("Profile COMPLETE for {UserId}", userId);
+                ProfileReadyFlag.Current?.MarkReady(userId);
                 return $"{ResponseComplete} Profile saved with all fields. Risk={profile.RiskTolerance}, Goals={profile.InvestmentGoals}, Timeframe={profile.InvestmentTimeframe}";
             }
             else

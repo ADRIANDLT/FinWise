@@ -10,7 +10,7 @@
 
 MCP Client → **FinWise.McpServer** (thin server host) → **FinWise.MultiAgentWorkflow** (core library).
 Hub-and-spoke: all agents route through Orchestrator. No direct agent-to-agent calls.
-`PROFILE_READY:` marker from ProfileAgent gates advisor/stock access. MCP-Session-Id header = agentSessionId.
+Structured session state (`ProfileSessionState` in `AgentSession.StateBag`) gates advisor/stock access: the workflow physically excludes the advisor/stock agents until the profile is ready. Profile DATA is delivered to those agents via an authoritative ephemeral `CURRENT USER PROFILE` context message loaded from the profile store each turn (not persisted). The legacy `PROFILE_READY:` chat-history marker is retained only as a migration fallback for old sessions. MCP-Session-Id header = agentSessionId.
 
 ### Agents
 
@@ -18,8 +18,8 @@ Hub-and-spoke: all agents route through Orchestrator. No direct agent-to-agent c
 |-------|------|
 | Orchestrator | Silent router — handoffs only, never outputs text to user |
 | ProfileAgent | Collects user profile (email, risk, goals, timeframe) |
-| AdvisorAgent | Investment recommendations (gated by `PROFILE_READY`) |
-| StockAgent | Market analysis via Azure AI Foundry (optional, gated by `PROFILE_READY`) |
+| AdvisorAgent | Investment recommendations (gated by `ProfileSessionState`) |
+| StockAgent | Market analysis via Azure AI Foundry (optional, gated by `ProfileSessionState`) |
 
 ## Repository Structure
 

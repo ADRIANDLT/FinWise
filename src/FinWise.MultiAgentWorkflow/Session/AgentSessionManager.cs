@@ -40,11 +40,41 @@ namespace FinWise.MultiAgentWorkflow.Session;
 /// </summary>
 public class AgentSessionManager
 {
+    private const string ProfileStateKey = "FinWiseProfileState";
+    private static readonly System.Text.Json.JsonSerializerOptions ProfileStateJsonOptions = new(System.Text.Json.JsonSerializerDefaults.Web)
+    {
+        // The StateBag serializes values lazily via options.GetTypeInfo(type); an explicit
+        // reflection resolver is required so ProfileSessionState survives persist/restore.
+        TypeInfoResolver = new System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver()
+    };
+
     private readonly AgentSessionStore _sessionStore;
 
     public AgentSessionManager(AgentSessionStore sessionStore)
     {
         _sessionStore = sessionStore;
+    }
+
+    /// <summary>
+    /// Reads the structured profile-ready state from the session's StateBag.
+    /// Returns a fresh, empty state if none has been stored yet.
+    /// </summary>
+    public ProfileSessionState GetProfileSessionState(AgentSession session)
+    {
+        if (session.StateBag.TryGetValue<ProfileSessionState>(ProfileStateKey, out var state, ProfileStateJsonOptions) && state is not null)
+        {
+            return state;
+        }
+        return new ProfileSessionState();
+    }
+
+    /// <summary>
+    /// Writes the structured profile-ready state into the session's StateBag so it is
+    /// serialized with the session on the next persist.
+    /// </summary>
+    public void SetProfileSessionState(AgentSession session, ProfileSessionState state)
+    {
+        session.StateBag.SetValue(ProfileStateKey, state, ProfileStateJsonOptions);
     }
 
     /// <summary>
