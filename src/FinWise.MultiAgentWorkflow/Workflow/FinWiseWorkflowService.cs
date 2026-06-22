@@ -1,6 +1,7 @@
 using FinWise.MultiAgentWorkflow.Agents.AdvisorAgent;
 using FinWise.MultiAgentWorkflow.Agents.OrchestratorAgent;
 using FinWise.MultiAgentWorkflow.Agents.UserProfileAgent;
+using FinWise.MultiAgentWorkflow.DomainModel;
 using FinWise.MultiAgentWorkflow.Infrastructure.UserProfileStores;
 using FinWise.MultiAgentWorkflow.Session;
 using Microsoft.Agents.AI;
@@ -27,6 +28,9 @@ namespace FinWise.MultiAgentWorkflow.Workflow;
 /// </summary>
 public class FinWiseWorkflowService
 {
+    /// <summary>AuthorName tag for the ephemeral per-turn profile-context message that must never be persisted.</summary>
+    internal const string ProfileContextAuthorName = "profile_context";
+
     private readonly IChatClient _chatClient;
     private readonly IUserProfileStore _profileStore;
     private readonly AIAgent? _stockAgent;
@@ -67,9 +71,7 @@ public class FinWiseWorkflowService
         {
             try
             {
-                // First create agents with profile-only access (safe default).
-                // We'll rebuild with full access after checking message history.
-                var (orchestratorAgent, workflow) = CreateAgentsAndWorkflow(agentSessionId, isProfileReady: false);
+                var orchestratorAgent = CreateOrchestratorAgent();
 
                 // Restore or create AgentSession using Microsoft Agent Framework patterns
                 // Messages are stored independently from AgentSession because the SDK's
@@ -77,15 +79,20 @@ public class FinWiseWorkflowService
                 var (currentSession, messageHistory) = await _sessionManager.GetOrCreateSessionAsync(orchestratorAgent, agentSessionId);
                 Log.Debug("Loaded {Count} messages from session store", messageHistory.Count);
 
-                // Determine if profile is ready — gates access to advisor/stock agents
-                bool isProfileReady = AgentSessionConstants.IsProfileReady(messageHistory);
-                if (isProfileReady)
+                // Structured profile-ready state (replaces the PROFILE_READY chat-history marker scan)
+                var profileState = _sessionManager.GetProfileSessionState(currentSession);
+                bool isProfileReady = profileState.ProfileReady;
+
+                // Fallback: migrate legacy sessions that only have the old text marker, no structured state
+                if (!isProfileReady && AgentSessionConstants.IsProfileReady(messageHistory))
                 {
-                    // Rebuild workflow with full agent access (advisor + stock agents)
-                    (orchestratorAgent, workflow) = CreateAgentsAndWorkflow(agentSessionId, isProfileReady: true);
-                    // Re-restore session for the new orchestrator agent instance
-                    (currentSession, messageHistory) = await _sessionManager.GetOrCreateSessionAsync(orchestratorAgent, agentSessionId);
+                    isProfileReady = true;
+                    profileState.ProfileReady = true;
+                    profileState.UserId ??= AgentSessionConstants.ExtractUserIdFromMessageHistory(messageHistory);
+                    Log.Information("Migrated legacy PROFILE_READY marker to structured session state for {AgentSessionId}", agentSessionId);
                 }
+
+                var workflow = BuildWorkflow(orchestratorAgent, isProfileReady);
 
                 Log.Information("======================== REQUEST START ========================");
                 Log.Information("ProcessMessage invoked, AgentSessionId: {AgentSessionId}, Query: {Query}", agentSessionId, query);
@@ -94,17 +101,45 @@ public class FinWiseWorkflowService
                 // Add user query
                 messageHistory.Add(new ChatMessage(ChatRole.User, query));
 
+                // Deliver the structured profile DATA to downstream agents (Option C).
+                // This replaces the old PROFILE_READY chat-history TEXT MARKER as the data channel:
+                // the profile is re-loaded fresh from the store on EVERY turn and injected as an
+                // EPHEMERAL, per-turn context message that is NOT persisted to messageHistory. Being
+                // ephemeral keeps it always reflecting the latest stored profile, and because it rides
+                // in the message history it reaches BOTH the local advisor_agent and the remote
+                // Azure-AI-Foundry stock agent (whose instructions cannot be injected locally).
+                List<ChatMessage> executionMessages = messageHistory;
+                if (isProfileReady && !string.IsNullOrWhiteSpace(profileState.UserId))
+                {
+                    UserProfile? profile = await _profileStore.GetProfileAsync(profileState.UserId);
+                    if (profile is not null)
+                    {
+                        var profileContextMessage = new ChatMessage(ChatRole.System, FormatProfileContext(profile))
+                        {
+                            AuthorName = ProfileContextAuthorName
+                        };
+                        executionMessages = [profileContextMessage, .. messageHistory];
+                        Log.Information("Injected authoritative profile context for downstream agents (userId: {UserId})", profileState.UserId);
+                    }
+                }
+
                 using var sessionScope = AgentSessionRunContext.Push(
                     new AgentSessionRunSnapshot(agentSessionId, messageHistory));
 
                 // Initialize reset token before workflow execution — tools mutate this shared reference
                 var resetToken = SessionResetFlag.Initialize();
 
+                // Initialize profile-ready token before workflow execution — profile tools mutate this
+                // shared reference; seeded with current readiness so it stays ready on later turns
+                var profileToken = ProfileReadyFlag.Initialize(isProfileReady, profileState.UserId);
+
                 // Execute workflow - per Microsoft Agent Framework workflow patterns
                 // Timeout prevents infinite handoff loops (e.g., orchestrator ↔ advisor bouncing)
                 using var workflowCts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-                var (response, workflowOutputs, lastRespondingAgent) = await ExecuteWorkflowAsync(workflow, messageHistory, workflowCts.Token);
-                AppendUniqueMessages(messageHistory, workflowOutputs);
+                var (response, workflowOutputs, lastRespondingAgent) = await ExecuteWorkflowAsync(workflow, executionMessages, workflowCts.Token);
+                // The workflow echoes input messages back in its outputs; never persist the ephemeral
+                // profile-context message (it carries PII and is re-injected fresh each turn).
+                AppendUniqueMessages(messageHistory, workflowOutputs.Where(m => !IsEphemeralProfileContext(m)).ToList());
 
                 // If we got no valid response, surface a retryable message.
                 // This covers two failure modes:
@@ -147,11 +182,21 @@ public class FinWiseWorkflowService
                 bool wasReset = resetToken.IsRequested;
                 if (wasReset && !isProfileReady)
                 {
-                    Log.Warning("Ignoring spurious session reset — PROFILE_READY not found in conversation history. {AgentSessionId}", agentSessionId);
+                    Log.Warning("Ignoring spurious session reset — profile not ready in structured session state. {AgentSessionId}", agentSessionId);
                     wasReset = false;
                 }
 
-                SessionResetFlag.Clear();
+                // Merge the ambient profile-ready flag back into the structured session state.
+                // Profile tools mutate the shared token during the run; persist their signal here.
+                if (profileToken.IsReady)
+                {
+                    profileState.ProfileReady = true;
+                    if (!string.IsNullOrWhiteSpace(profileToken.UserId))
+                    {
+                        profileState.UserId = profileToken.UserId;
+                    }
+                }
+
                 if (wasReset)
                 {
                     // Override any workflow output — the reset is the only thing that matters.
@@ -164,10 +209,10 @@ public class FinWiseWorkflowService
                 else
                 {
                     // Only persist if not resetting — reset clears the session
+                    _sessionManager.SetProfileSessionState(currentSession, profileState);
                     await _sessionManager.PersistSessionAsync(agentSessionId, currentSession, orchestratorAgent, messageHistory);
 
-                    string loggedUserId = AgentSessionConstants.ExtractUserIdFromMessageHistory(messageHistory)
-                        ?? $"anonymous+{agentSessionId}";
+                    string loggedUserId = profileState.UserId ?? $"anonymous+{agentSessionId}";
                     Log.Information("Persisted AgentSession with {MessageCount} messages for session {AgentSessionId} (userId: {UserId})",
                         messageHistory.Count, agentSessionId, loggedUserId);
                 }
@@ -194,6 +239,15 @@ public class FinWiseWorkflowService
                     agentSessionId,
                     WasReset: false);
             }
+            finally
+            {
+                // Always clear the request-scoped ambient tokens, even on the exception/timeout
+                // paths. AsyncLocal mutations don't flow back to the caller, but clearing here
+                // guarantees cleanup regardless of how this request exits (success, early return,
+                // or exception) and keeps the cleanup robust against future control-flow changes.
+                SessionResetFlag.Clear();
+                ProfileReadyFlag.Clear();
+            }
         }
     }
 
@@ -214,17 +268,24 @@ public class FinWiseWorkflowService
     }
 
     /// <summary>
-    /// Creates the four-agent handoff workflow.
-    /// Strict hub-and-spoke: all agents route exclusively through the orchestrator.
+    /// Creates the orchestrator agent (the strict hub-and-spoke router).
+    /// Its Id is stable via the factory, keeping the session storage key unchanged.
     /// </summary>
-    private (AIAgent OrchestratorAgent, AgentWorkflow Workflow) CreateAgentsAndWorkflow(string agentSessionId, bool isProfileReady = false)
+    private ChatClientAgent CreateOrchestratorAgent()
     {
-        Log.Information("Creating agents for AgentSessionId: {AgentSessionId}", agentSessionId);
+        Log.Information("Creating orchestrator agent");
 
-        // Create specialist agents using factory pattern (manual DI)
         OrchestratorAgentFactory orchestratorAgtFactory = new(_chatClient);
-        ChatClientAgent orchestratorAgent = orchestratorAgtFactory.CreateAgent();
+        return orchestratorAgtFactory.CreateAgent();
+    }
 
+    /// <summary>
+    /// Builds the handoff workflow around the given orchestrator agent.
+    /// Strict hub-and-spoke: all agents route exclusively through the orchestrator.
+    /// Advisor/stock agents are gated behind profile completion to prevent handoff loops.
+    /// </summary>
+    private AgentWorkflow BuildWorkflow(AIAgent orchestratorAgent, bool isProfileReady)
+    {
         // ProfileStore is injected but only passed through to the agent factory
         // Profiles are keyed by userId (email address) to enable reuse across sessions
         UserProfileAgentFactory userProfileAgtFactory = new(_chatClient, _profileStore);
@@ -235,7 +296,7 @@ public class FinWiseWorkflowService
 
         // Build the handoff workflow — strict hub-and-spoke (all agents route through orchestrator)
         // Gate advisor/stock agents behind profile completion to prevent handoff loops.
-        // Without PROFILE_READY, the orchestrator can ONLY route to profile_agent.
+        // Without profile readiness, the orchestrator can ONLY route to profile_agent.
         // Stock agent is optional — excluded from workflow if not configured.
         AIAgent[] availableAgents = isProfileReady
             ? _stockAgent is not null
@@ -248,12 +309,12 @@ public class FinWiseWorkflowService
             .WithHandoffs(availableAgents, orchestratorAgent)
             .Build();
 
-        Log.Information("FinWise workflow initialized with {AgentCount} agents for session {AgentSessionId} (ProfileReady: {IsProfileReady})",
-            availableAgents.Length + 1, agentSessionId, isProfileReady);
+        Log.Information("FinWise workflow initialized with {AgentCount} agents (ProfileReady: {IsProfileReady})",
+            availableAgents.Length + 1, isProfileReady);
 
         Log.Debug("Workflow Mermaid visualization:\n{MermaidDiagram}", workflow.ToMermaidString());
 
-        return (orchestratorAgent, workflow);
+        return workflow;
     }
 
     /// <summary>
@@ -265,6 +326,22 @@ public class FinWiseWorkflowService
     /// Prevents infinite handoff loops (e.g., orchestrator ↔ advisor bouncing when no profile exists).
     /// </summary>
     private const int MaxAgentInvocations = 25;
+
+    /// <summary>
+    /// Formats a user profile into an authoritative, human-readable context block for downstream agents.
+    /// Injected as an ephemeral per-turn message so the advisor and remote stock agent always see the
+    /// latest stored profile DATA without re-prompting the user.
+    /// </summary>
+    /// <param name="profile">The user profile loaded from the profile store.</param>
+    /// <returns>A readable profile-context block.</returns>
+    internal static string FormatProfileContext(UserProfile profile) =>
+        $"""
+        CURRENT USER PROFILE (authoritative — loaded from the profile store; use these values, do not ask for them again):
+        - Email: {profile.UserId}
+        - Risk tolerance: {profile.RiskTolerance ?? "(not specified)"}
+        - Investment goals: {profile.InvestmentGoals ?? "(not specified)"}
+        - Investment timeframe: {profile.InvestmentTimeframe ?? "(not specified)"}
+        """;
 
     private static async Task<(string? Response, List<ChatMessage> Outputs, string? LastExecutor)> ExecuteWorkflowAsync(
                                                                                                         AgentWorkflow workflow,
@@ -361,6 +438,10 @@ public class FinWiseWorkflowService
             }
         }
     }
+
+    /// <summary>True for the ephemeral profile-context message injected per turn — these must be excluded from persisted history.</summary>
+    internal static bool IsEphemeralProfileContext(ChatMessage message) =>
+        string.Equals(message.AuthorName, ProfileContextAuthorName, StringComparison.Ordinal);
 
     /// <summary>
     /// Creates a deduplication signature for a chat message using role, author, and text.

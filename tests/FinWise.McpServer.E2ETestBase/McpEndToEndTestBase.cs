@@ -179,7 +179,7 @@ public abstract class McpEndToEndTestBase : IDisposable
         ThrowIfTransientProfileStepResponse(r5, "5 (timeframe)");
         if (IsProfileCompleteResponse(r5, email)) { Output.WriteLine("Test profile setup completed"); return r5; }
 
-        // Fallback: make one more call to trigger the PROFILE_READY marker
+        // Fallback: make one more call to elicit an explicit profile-completion response
         Output.WriteLine("  No profile completion found, making fallback call...");
         var fallback = await CallFinancialAdviceTool("Show me my investment profile", sessionId);
         Output.WriteLine($"  Fallback: {TruncateForLog(fallback)}");
@@ -229,25 +229,41 @@ public abstract class McpEndToEndTestBase : IDisposable
     }
 
     /// <summary>
-    /// Detects profile completion responses — either the structured PROFILE_READY marker
-    /// or a conversational response that confirms profile data (LLM non-determinism).
+    /// Detects profile-completion responses via conversational heuristics. The legacy
+    /// PROFILE_READY marker was removed in the structured-state migration, so agents no
+    /// longer emit it; completion is now inferred from the assistant acknowledging the
+    /// profile and offering investment guidance (LLM phrasing is non-deterministic, so the
+    /// checks are case-insensitive and intentionally broad).
     /// </summary>
     protected static bool IsProfileCompleteResponse(string response, string email)
     {
-        if (response.Contains("PROFILE_READY:", global::System.StringComparison.OrdinalIgnoreCase))
-            return true;
-
         var lower = response.ToLowerInvariant();
         bool hasEmail = response.Contains(email, global::System.StringComparison.OrdinalIgnoreCase);
+
         bool confirmsCompletion = lower.Contains("profile is now complete") ||
+                                  lower.Contains("profile is complete") ||
                                   lower.Contains("profile has been created") ||
+                                  lower.Contains("profile has been saved") ||
+                                  lower.Contains("profile is saved") ||
                                   lower.Contains("here are your details") ||
                                   lower.Contains("profile is set up") ||
-                                  lower.Contains("profile is ready");
+                                  lower.Contains("profile is all set") ||
+                                  lower.Contains("profile is ready") ||
+                                  lower.Contains("all set");
+
+        bool offersAdvice = lower.Contains("investment guidance") ||
+                            lower.Contains("investment advice") ||
+                            lower.Contains("what would you like advice on") ||
+                            lower.Contains("how can i help you invest") ||
+                            lower.Contains("what would you like to know") ||
+                            lower.Contains("ready to help") ||
+                            lower.Contains("happy to help") ||
+                            lower.Contains("recommend");
+
         bool hasProfileFields = (lower.Contains("risk") || lower.Contains("tolerance")) &&
                                 (lower.Contains("goal") || lower.Contains("timeframe") || lower.Contains("investment"));
 
-        return hasEmail && (confirmsCompletion || hasProfileFields);
+        return hasEmail && (confirmsCompletion || offersAdvice || hasProfileFields);
     }
 
     protected async Task<string> CallResetSessionTool(string? sessionId = null)

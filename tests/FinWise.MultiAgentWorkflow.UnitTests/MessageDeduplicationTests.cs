@@ -150,6 +150,67 @@ public class MessageDeduplicationTests
 
     #endregion
 
+    #region IsEphemeralProfileContext
+
+    [Fact]
+    public void IsEphemeralProfileContext_Should_ReturnTrue_ForProfileContextAuthoredMessage()
+    {
+        // Arrange
+        var message = new ChatMessage(ChatRole.System, "CURRENT USER PROFILE ...")
+        {
+            AuthorName = FinWiseWorkflowService.ProfileContextAuthorName
+        };
+
+        // Act / Assert
+        FinWiseWorkflowService.IsEphemeralProfileContext(message).Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsEphemeralProfileContext_Should_ReturnFalse_ForNormalMessages()
+    {
+        // Arrange
+        var assistantMessage = new ChatMessage(ChatRole.Assistant, "Here is my advice") { AuthorName = "advisor_agent" };
+        var userMessage = new ChatMessage(ChatRole.User, "What should I invest in?");
+
+        // Act / Assert
+        FinWiseWorkflowService.IsEphemeralProfileContext(assistantMessage).Should().BeFalse();
+        FinWiseWorkflowService.IsEphemeralProfileContext(userMessage).Should().BeFalse();
+    }
+
+    [Fact]
+    public void AppendUniqueMessages_Should_NotPersistEphemeralProfileContext_WhenEchoedInOutputs()
+    {
+        // Arrange — existing history: a user message and an assistant reply
+        var userMessage = new ChatMessage(ChatRole.User, "What should I invest in?");
+        var assistantReply = new ChatMessage(ChatRole.Assistant, "Earlier advice") { AuthorName = "advisor_agent" };
+        var messageHistory = new List<ChatMessage> { userMessage, assistantReply };
+
+        const string profileContextText =
+            "CURRENT USER PROFILE\nEmail: jane@example.com\nRisk: aggressive\nGoals: retirement\nTimeframe: 20 years";
+
+        // Simulate the SDK echo: the ephemeral profile-context message, the echoed user
+        // message, and a NEW assistant message all come back in the workflow outputs.
+        var workflowOutputs = new List<ChatMessage>
+        {
+            new(ChatRole.System, profileContextText) { AuthorName = FinWiseWorkflowService.ProfileContextAuthorName },
+            new(ChatRole.User, "What should I invest in?"),
+            new(ChatRole.Assistant, "Fresh advice based on your profile") { AuthorName = "advisor_agent" }
+        };
+
+        // Act — apply the SAME filter used in production before appending
+        var filtered = workflowOutputs.Where(m => !FinWiseWorkflowService.IsEphemeralProfileContext(m)).ToList();
+        FinWiseWorkflowService.AppendUniqueMessages(messageHistory, filtered);
+
+        // Assert — the new assistant message is persisted...
+        messageHistory.Should().Contain(m => m.Text == "Fresh advice based on your profile");
+        // ...but no profile-context message and no PII text leaked into history
+        messageHistory.Should().NotContain(m => m.AuthorName == FinWiseWorkflowService.ProfileContextAuthorName);
+        messageHistory.Should().NotContain(m => (m.Text ?? string.Empty).Contains("CURRENT USER PROFILE"));
+        messageHistory.Should().NotContain(m => (m.Text ?? string.Empty).Contains("jane@example.com"));
+    }
+
+    #endregion
+
     #region ExtractUserIdFromMessageHistory
 
     [Fact]

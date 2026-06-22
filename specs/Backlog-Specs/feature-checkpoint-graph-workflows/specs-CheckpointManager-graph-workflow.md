@@ -203,7 +203,7 @@ These improvements can be done incrementally without changing the orchestration 
 | **Adopt `CheckpointManager` with `CosmosCheckpointStore`** | Add Cosmos DB-backed checkpointing to handoff execution for mid-workflow fault tolerance, scalable across pods | Nothing (new capability) — Redis session store remains for cross-request persistence and MCP migration | Medium |
 | **Adopt `ApprovalRequiredAIFunction`** | Wrap sensitive tools (e.g., `set_profile`, `delete_profile`) with approval middleware | N/A (no approval exists today) | Low |
 | **Replace `SessionResetFlag`** | Use framework `WorkflowEvent` with `RequestInfoEvent` for reset requests | Custom `AsyncLocal<SessionResetToken>` pattern | Medium |
-| **Replace `PROFILE_READY` text marker** | Store profile-ready state as structured data in session state, not as a text marker in chat history | Regex scan of entire chat history | Medium |
+| **Replace `PROFILE_READY` text marker** ✅ **DONE** | Store profile-ready state as structured data (`ProfileSessionState` in `AgentSession.StateBag`), not as a text marker in chat history (legacy marker retained only as a migration fallback) | Regex scan of entire chat history | Medium |
 | **Migrate agent session to Cosmos** (optional, longer-term) | Implement Cosmos-backed `AgentSessionStore` or `ChatHistoryProvider`, reducing Redis to MCP migration only | `RedisAgentSessionStore` | High |
 
 > **Note**: The `RedisSessionMigrationHandler` (MCP `mcpinit:*` keys) stays regardless — it serves short-lived cross-instance transport state with sliding TTL, which is Redis's sweet spot.
@@ -229,7 +229,7 @@ Whether adopting framework features now or graph later, don't do a big-bang migr
 
 **Phase 1 (Now — within handoff):**
 1. Adopt `CheckpointManager` with `CosmosCheckpointStore` for scalable workflow state persistence
-2. Replace `PROFILE_READY` text marker with structured state in session/checkpoint
+2. ✅ **DONE** — Replaced `PROFILE_READY` text marker with structured `ProfileSessionState` in session state (legacy marker kept as migration fallback)
 3. Replace `SessionResetFlag` AsyncLocal with framework `WorkflowEvent`
 
 **Phase 2 (Consolidate storage — reduce Redis dependency):**

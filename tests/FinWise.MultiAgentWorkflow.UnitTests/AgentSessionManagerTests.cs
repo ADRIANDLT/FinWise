@@ -174,4 +174,54 @@ public class AgentSessionManagerTests
         restoredMessages.Should().HaveCount(1);
         restoredMessages[0].Text.Should().Be("Hello from agent 1");
     }
+
+    [Fact]
+    public async Task GetProfileSessionState_FreshSession_ReturnsEmptyState()
+    {
+        var (session, _) = await _manager.GetOrCreateSessionAsync(_agent, "fresh-profile-state");
+
+        var state = _manager.GetProfileSessionState(session);
+
+        state.Should().NotBeNull();
+        state.ProfileReady.Should().BeFalse();
+        state.UserId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SetProfileSessionState_ThenGet_OnSameSession_ReturnsStoredValues()
+    {
+        var (session, _) = await _manager.GetOrCreateSessionAsync(_agent, "set-get-profile-state");
+
+        _manager.SetProfileSessionState(session, new ProfileSessionState
+        {
+            ProfileReady = true,
+            UserId = "user@example.com"
+        });
+
+        var state = _manager.GetProfileSessionState(session);
+        state.ProfileReady.Should().BeTrue();
+        state.UserId.Should().Be("user@example.com");
+    }
+
+    [Fact]
+    public async Task ProfileSessionState_SurvivesPersistAndRestore_RoundTrip()
+    {
+        const string sessionId = "profile-state-roundtrip";
+
+        // Set structured state, then persist the session.
+        var (session, _) = await _manager.GetOrCreateSessionAsync(_agent, sessionId);
+        _manager.SetProfileSessionState(session, new ProfileSessionState
+        {
+            ProfileReady = true,
+            UserId = "user@example.com"
+        });
+        await _manager.PersistSessionAsync(sessionId, session, _agent, []);
+
+        // Restore the session and verify the structured state survived StateBag JSON serialization.
+        var (restoredSession, _) = await _manager.GetOrCreateSessionAsync(_agent, sessionId);
+        var restoredState = _manager.GetProfileSessionState(restoredSession);
+
+        restoredState.ProfileReady.Should().BeTrue();
+        restoredState.UserId.Should().Be("user@example.com");
+    }
 }
